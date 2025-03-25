@@ -1,2 +1,9 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script context="module" lang="ts">
+    import { version, dev } from "$app/environment";
+</script>
+
+<h1>Welcome to Folium!</h1>
+
+<footer>
+    <h3>Using Ledger v{version}{dev ? "-dev" : ""}</h3>
+</footer>

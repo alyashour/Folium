@@ -40,7 +40,7 @@
 
     onMount(() => {
         pingServer();
-        const interval = setInterval(pingServer, 10000);
+        const interval = setInterval(pingServer, 10 * 60 * 1000); // ping every 10 mins
         return () => clearInterval(interval);
     });
 </script>
@@ -48,7 +48,7 @@
 <footer class="footer bg-dark text-white py-4">
     <Container>
         <p><i>Folium</i> © 2025</p>
-        <a href="https://www.github.com">Github</a>
+        <a href="https://github.com/alyashour/Ledger">Github</a>
         <p>Using Ledger v{version}{dev ? "-dev" : ""}</p>
         <p>
             Made by Aly Ashour, Hamza Elkababji, Saad Elbayaty, and Omar Ramadan

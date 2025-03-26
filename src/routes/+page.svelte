@@ -1,99 +1,84 @@
 <script lang="ts">
-    import Article from "$lib/components/Article.svelte";
-    import {
-        Button,
-        Col,
-        Row,
-        Dropdown,
-        DropdownToggle,
-        DropdownMenu,
-        DropdownItem,
-    } from "@sveltestrap/sveltestrap";
-
-    // Optional state for dropdowns if needed in the future
-    let textSizeDropdownOpen = false;
-    let widthDropdownOpen = false;
-    let colorDropdownOpen = false;
-
-    function toggleTextSize() {
-        textSizeDropdownOpen = !textSizeDropdownOpen;
+    import { onMount } from 'svelte';
+    import { Button } from '@sveltestrap/sveltestrap';
+    import { PUBLIC_API_BASE_URL } from '$env/static/public';
+    
+    let classes: Array<{ id: string; title: string }> = [];
+    let loading: boolean = true;
+    let error: string | null = null;
+    
+    async function fetchClasses() {
+      loading = true;
+      error = null;
+      try {
+        const res = await fetch(`${PUBLIC_API_BASE_URL}/api/me/classes`);
+        if (!res.ok) {
+          throw new Error(`Error: ${res.status}`);
+        }
+        const data = await res.json();
+        // Convert the object of classes into an array:
+        classes = Object.values(data.classes);
+      } catch (err: any) {
+        error = err.message;
+      } finally {
+        loading = false;
+      }
     }
-    function toggleWidth() {
-        widthDropdownOpen = !widthDropdownOpen;
+    
+    onMount(() => {
+      fetchClasses();
+    });
+  </script>
+  
+  <h1>Your Classes</h1>
+  
+  {#if loading}
+    <p>Loading...</p>
+  {:else if error}
+    <p>Error: {error}</p>
+  {:else if classes.length === 0}
+    <p>No classes found.</p>
+  {:else}
+    <div class="tile-container">
+      {#each classes as c}
+        <a href={`/classes/${c.id}`} class="class-tile">
+          <h3>{c.title || "Untitled"}</h3>
+        </a>
+      {/each}
+    </div>
+  {/if}
+  
+  <Button class="mt-5">Add New Class</Button>
+  
+  <style>
+    /* Flex container for the tiles */
+    .tile-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
     }
-    function toggleColor() {
-        colorDropdownOpen = !colorDropdownOpen;
+    
+    /* Styling each tile */
+    .class-tile {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1rem;
+      background-color: #f8f9fa;
+      flex: 1 1 200px; /* Each tile will have a minimum width of 200px */
+      transition: transform 0.2s, background-color 0.2s;
     }
-</script>
-
-<Row class="mt-3">
-    <!-- Left Column: Class Selector -->
-    <Col md="2">
-        <h5>My Classes</h5>
-        <ul class="list-unstyled">
-            <li><a href="/class1">Class 1</a></li>
-            <li><a href="/class2">Class 2</a></li>
-            <li><a href="/classn">Class 3</a></li>
-        </ul>
-        <Button color="primary" size="sm">New Class</Button>
-    </Col>
-
-    <!-- Main Column: Article (stretches to min viewport height) -->
-    <Col md="8">
-        <Article />
-    </Col>
-
-    <!-- Right Column: Appearance Settings -->
-    <Col md="2">
-        <h5>Appearance</h5>
-
-        <!-- Text Size Dropdown -->
-        <Dropdown isOpen={textSizeDropdownOpen} toggle={toggleTextSize}>
-            <DropdownToggle caret color="secondary" size="sm">
-                Text Size
-            </DropdownToggle>
-            <DropdownMenu>
-                <DropdownItem>Small</DropdownItem>
-                <DropdownItem>Medium</DropdownItem>
-                <DropdownItem>Large</DropdownItem>
-            </DropdownMenu>
-        </Dropdown>
-
-        <!-- Width Dropdown -->
-        <Dropdown isOpen={widthDropdownOpen} toggle={toggleWidth} class="mt-2">
-            <DropdownToggle caret color="secondary" size="sm">
-                Width
-            </DropdownToggle>
-            <DropdownMenu>
-                <DropdownItem>Wide</DropdownItem>
-                <DropdownItem>Narrow</DropdownItem>
-            </DropdownMenu>
-        </Dropdown>
-
-        <!-- Color Dropdown -->
-        <Dropdown isOpen={colorDropdownOpen} toggle={toggleColor} class="mt-2">
-            <DropdownToggle caret color="secondary" size="sm">
-                Color
-            </DropdownToggle>
-            <DropdownMenu>
-                <DropdownItem>Automatic</DropdownItem>
-                <DropdownItem>Light</DropdownItem>
-                <DropdownItem>Dark</DropdownItem>
-            </DropdownMenu>
-        </Dropdown>
-    </Col>
-</Row>
-
-<style>
-    /* Remove list styling from the classes list */
-    ul.list-unstyled {
-        padding-left: 0;
+    
+    .class-tile:hover {
+      background-color: #e2e6ea;
+      transform: translateY(-3px);
     }
-    ul.list-unstyled li a {
-        text-decoration: none;
-        color: inherit;
+    
+    .class-tile h3 {
+      margin: 0;
+      font-size: 1.2rem;
     }
-    ul.list-unstyled li a:hover {
-        text-decoration: underline;
-    }
-</style>
+  </style>
+  

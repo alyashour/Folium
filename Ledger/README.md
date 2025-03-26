@@ -1,5 +1,5 @@
 # Ledger
-This is the webapp frontends for Folium!  
+This is the webapp frontend for Folium!  
 Please see the folium repository for information about that.  
 Currently in early development. Going for a Wikipedia-esque interface.  
 

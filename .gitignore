@@ -7,3 +7,7 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.test
+
+# IDEs
+.idea
+.vscode

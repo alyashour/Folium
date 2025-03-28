@@ -4,23 +4,23 @@
     import { version, dev } from "$app/environment";
     import { PUBLIC_LEDGER_PING_URL } from "$env/static/public";
 
-    let ledgerStatus: "up" | "error" | "timeout" | "unknown" = "unknown";
+    let serverStatus: "up" | "error" | "timeout" | "unknown" = "unknown";
 
     $: statusColor =
-        ledgerStatus === "up"
+        serverStatus === "up"
             ? "green"
-            : ledgerStatus === "error"
+            : serverStatus === "error"
               ? "red"
-              : ledgerStatus === "timeout"
+              : serverStatus === "timeout"
                 ? "orange"
                 : "yellow";
 
     $: statusText =
-        ledgerStatus === "up"
+        serverStatus === "up"
             ? "Connected"
-            : ledgerStatus === "error"
+            : serverStatus === "error"
               ? "Not connected"
-              : ledgerStatus === "timeout"
+              : serverStatus === "timeout"
                 ? "Timed out"
                 : "Unknown";
 
@@ -32,9 +32,9 @@
                 signal: controller.signal,
             });
             clearTimeout(timeout);
-            ledgerStatus = response.ok ? "up" : "error";
+            serverStatus = response.ok ? "up" : "error";
         } catch (error: any) {
-            ledgerStatus = error.name === "AbortError" ? "timeout" : "error";
+            serverStatus = error.name === "AbortError" ? "timeout" : "error";
         }
     }
 

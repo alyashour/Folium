@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { Button } from '@sveltestrap/sveltestrap';
     import { PUBLIC_API_BASE_URL } from '$env/static/public';
-    
+
     let classes: Array<{ id: string; title: string }> = [];
     let loading: boolean = true;
     let error: string | null = null;
@@ -29,6 +29,10 @@
       fetchClasses();
     });
   </script>
+
+  <pre>
+    {PUBLIC_API_BASE_URL}
+  </pre>
   
   <h1>Your Classes</h1>
   

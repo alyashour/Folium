@@ -1,13 +1,24 @@
-#include <httplib.h>
+#include "dispatcher.hpp"
+#include "gateway.hpp"
+#include "logger.hpp"
 
-using namespace httplib;
+#include <string>
+
+using namespace std;
+
+string version = "0.1.0";
+string ip = "127.0.0.1";
+string port = "90105";
+unsigned int num_threads = 1000;
 
 int main(void) {
-  Server svr;
+  Logger::log("Starting Folium Server v" + version);
 
-  svr.Get("/hi", [](const Request & /*req*/, Response &res) {
-    res.set_content("Hello World!", "text/plain");
-  });
+  bool success = Dispatcher::create_threads(num_threads);
+  if (!success) {
+    Logger::log_err("Failed to start threads, closing program...");
+    exit(1);
+  }
 
-  svr.listen("0.0.0.0", 8080);
+  Gateway::listen(ip, port);
 }

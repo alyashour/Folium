@@ -1,5 +1,5 @@
-#include "dispatcher.hpp"
-#include "gateway.hpp"
+// #include "dispatcher.hpp"
+// #include "gateway.hpp"
 #include "logger.hpp"
 
 #include <string>
@@ -9,16 +9,14 @@ using namespace std;
 string version = "0.1.0";
 string ip = "127.0.0.1";
 string port = "90105";
-unsigned int num_threads = 1000;
+unsigned int num_threads = 10;
 
 int main(void) {
   Logger::log("Starting Folium Server v" + version);
 
-  bool success = Dispatcher::create_threads(num_threads);
-  if (!success) {
-    Logger::log_err("Failed to start threads, closing program...");
-    exit(1);
-  }
+  // Dispatcher::create_threads(num_threads);
 
-  Gateway::listen(ip, port);
+  // Gateway::listen(ip, port);
+
+  Logger::log("Done! Closing Folium Server.");
 }

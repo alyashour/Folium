@@ -1,0 +1,11 @@
+#ifndef FOLSERV_VERSION_H_
+#define FOLSERV_VERSION_H_
+
+#include <string>
+namespace Folium {
+    const std::string VERSION = "@PROJECT_VERSION@";
+    const std::string BUILD_ID = "@GIT_HASH@";
+    const std::string BUILD_DATE = "@BUILD_DATE@";
+}
+
+#endif // FOLSERV_VERSION_H_

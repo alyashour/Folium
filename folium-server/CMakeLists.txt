@@ -15,6 +15,36 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+## VERSIONING ##
+
+# Get Git commit hash for build id
+find_package(Git QUIET)
+if (GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD 
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_HASH 
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+else()
+    set(GIT_HASH "unknown")
+endif()
+
+# Generate build date
+string(TIMESTAMP BUILD_DATE "%Y-%m-%d" UTC)
+
+# Configure
+configure_file(
+    ${CMAKE_SOURCE_DIR}/src/version.h.in 
+    ${CMAKE_BINARY_DIR}/generated/version.h 
+    @ONLY
+)
+
+# Include the generated dir
+include_directories(${CMAKE_BINARY_DIR}/generated)
+
+## INSTALL GOOGLE TEST ##
+
 # Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -23,6 +53,8 @@ FetchContent_Declare(
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+## SET UP EXECUTABLE ##
 
 # Source code lib
 add_library(folium-core
@@ -43,6 +75,10 @@ target_include_directories(folium-core PUBLIC
 # Add the executable
 add_executable(folium-server src/main.cc)
 target_link_libraries(folium-server PRIVATE folium-core)
+
+# Force a rebuild on new version
+add_custom_target(version-info DEPENDS ${CMAKE_BINARY_DIR}/generated/version.h)
+add_dependencies(folium-server version-info)
 
 ## TESTING ##
 # Enable testing

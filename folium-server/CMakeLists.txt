@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.11)
 project(FoliumServer VERSION 0.1.0 LANGUAGES CXX)
 
 # Set default build type (if not already set)
@@ -43,7 +43,7 @@ configure_file(
 # Include the generated dir
 include_directories(${CMAKE_BINARY_DIR}/generated)
 
-## INSTALL GOOGLE TEST ##
+## INSTALL PACKAGES ##
 
 # Google Test
 include(FetchContent)
@@ -52,7 +52,23 @@ FetchContent_Declare(
     URL https://github.com/google/googletest/archive/52204f78f94d7512df1f0f3bea1d47437a2c3a58.zip
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+
+# Cpp-httplib
+FetchContent_Declare(
+  httplib
+  GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+  GIT_TAG        v0.20.0
+)
+
+# Nlohmann/json
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG        v3.11.3
+)
+
+# Make the libraries available
+FetchContent_MakeAvailable(googletest httplib json)
 
 ## SET UP EXECUTABLE ##
 
@@ -72,9 +88,13 @@ target_include_directories(folium-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src 
 )
 
+target_link_libraries(folium-core PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(folium-core PUBLIC httplib)
+
 # Add the executable
 add_executable(folium-server src/main.cc)
 target_link_libraries(folium-server PRIVATE folium-core)
+
 
 # Force a rebuild on new version
 add_custom_target(version-info DEPENDS ${CMAKE_BINARY_DIR}/generated/version.h)

@@ -1,6 +1,6 @@
 # BUILD
-build/*
-release/*
+build/
+release/
 
 # GENERATED FILES
 generated/

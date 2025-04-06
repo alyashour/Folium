@@ -18,7 +18,7 @@
 
 #include <vector>
 #include <string>
-#include <json.h>
+#include <nlohmann/json.hpp>
 
 namespace DAL {
     //////////////

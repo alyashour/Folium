@@ -22,11 +22,13 @@ FetchContent_MakeAvailable(googletest)
 # Specify where to find the header files
 include_directories(include)
 
-# Specify where source is
-set(SOURCE_DIR
-)
-
 # Add the source files
 add_executable(folium-server
-    src/main.cpp
+    src/main.cc
+    src/auth.cc 
+    src/core.cc 
+    src/data_access_layer.cc 
+    src/dispatcher.cc 
+    src/http_gateway.cc 
+    src/logger.cc 
 )

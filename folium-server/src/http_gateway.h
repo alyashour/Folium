@@ -22,7 +22,7 @@ namespace Gateway {
      * @param ip The IP address to bind the server to.
      * @param port The port to listen on.
      */
-    void listen(std::string ip, std::string port);
+    void listen(std::string ip, int port);
 }
 
 #endif // FOLSERV_HTTP_GATEWAY_H_

@@ -1,35 +1,44 @@
+<!-- src/lib/components/Notification.svelte -->
 <script lang="ts">
-    import { notification } from '$lib/stores/notification';
-    import { onDestroy } from 'svelte';
-    
-    let message = '';
-    const unsubscribe = notification.subscribe((msg) => {
-      message = msg;
-      if (msg) {
-        setTimeout(() => notification.set(''), 5000); // Auto-clear after 5 seconds
-      }
-    });
-    
-    onDestroy(() => unsubscribe());
-  </script>
-  
-  {#if message}
-    <div class="notification">
-      {message}
-    </div>
-  {/if}
-  
-  <style>
-    .notification {
-      position: fixed;
-      top: 1rem;
-      right: 1rem;
-      background-color: #ff4d4f;
-      color: white;
-      padding: 1rem;
-      border-radius: 8px;
-      z-index: 1000;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-  </style>
-  
+  export let onRetry: () => void;
+</script>
+
+<div class="modal-overlay">
+  <div class="modal-content">
+    <h2>Connection Error</h2>
+    <p>We weren't able to connect to the server.</p>
+    <button on:click={onRetry}>Retry</button>
+  </div>
+</div>
+
+<style>
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-content {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+  }
+  button {
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: #1890ff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+</style>

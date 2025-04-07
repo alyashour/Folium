@@ -10,14 +10,10 @@
 #include "f_task.h"
 #include "core.h"
 
-// For demonstration, we assume that f_task.h defines:
-// enum Task_Type { PING, CREATE_NOTE, EDIT_NOTE, SING_IN, SING_UP, LOG_OUT };
-// and that Core::createNote() and Core::editNote() are implemented in core.h
-
 namespace Dispatcher {
 
 // --- Internal extended task structure ---
-// We extend the base F_Task (from f_task.h) to include parameters for note operations.
+// Extends the base F_Task (from f_task.h) to include parameters for note operations.
 struct ExtendedTask : public F_Task {
     int noteID;
     int userID;
@@ -31,6 +27,21 @@ struct ExtendedTask : public F_Task {
           thread_id = 0;
       }
 };
+
+// --- Function to return a static priority for each task type ---
+int getStaticPriority(Task_Type type) {
+    // Arbitrary static priority values:
+    // Lower numbers mean higher priority.
+    switch (type) {
+        case PING:       return 5;
+        case CREATE_NOTE:return 1;  // Also special, so handled separately.
+        case EDIT_NOTE:  return 2;
+        case SING_IN:    return 3;
+        case SING_UP:    return 3;
+        case LOG_OUT:    return 4;
+        default:         return 10;
+    }
+}
 
 // --- Wrapper to attach a priority to each task ---
 struct PrioritizedTask {
@@ -65,8 +76,9 @@ public:
         return true;
     }
 
-    // Internal function to add a task to the dispatcher.
-    void addTask(const ExtendedTask& task, int priority) {
+    // Modified addTask: no need to pass a priority; we compute it statically.
+    void addTask(const ExtendedTask& task) {
+        int priority = getStaticPriority(task.type);
         // If the task is a CREATE_NOTE, treat it as a special task.
         if (task.type == CREATE_NOTE) {
             {
@@ -106,7 +118,7 @@ private:
     // Worker thread function: processes tasks from the queue.
     void workerThread() {
         while (true) {
-            PrioritizedTask prioritizedTask(ExtendedTask(PING, 0, 0, ""), 0); // default initialization
+            PrioritizedTask prioritizedTask(ExtendedTask(PING, 0, 0, ""), 0); // Default initialization.
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 cv.wait(lock, [this]{
@@ -170,11 +182,11 @@ bool create_threads(unsigned int num_threads) {
 }
 
 // --- Additional internal functions for testing ---
-// These functions are not part of the original header interface, but are useful for adding tasks and stopping the dispatcher.
+// These functions are not part of the original header interface but are useful for adding tasks and stopping the dispatcher.
 #ifdef DISPATCHER_TEST
 // Expose addTask for testing purposes.
-void addTaskForTesting(const ExtendedTask& task, int priority) {
-    dispatcherImpl.addTask(task, priority);
+void addTaskForTesting(const ExtendedTask& task) {
+    dispatcherImpl.addTask(task);
 }
 
 // Expose stop functionality.
@@ -196,17 +208,17 @@ void stopDispatcher() {
     
 //     // Create and submit a few tasks.
 //     ExtendedTask pingTask(PING, 0, 0, "");
-//     addTaskForTesting(pingTask, 5);
+//     addTaskForTesting(pingTask);
     
 //     ExtendedTask editTask(EDIT_NOTE, 101, 1, "Updated note content");
-//     addTaskForTesting(editTask, 3);
+//     addTaskForTesting(editTask);
     
 //     // Special task: CREATE_NOTE will stall other threads.
 //     ExtendedTask createTask(CREATE_NOTE, 102, 2, "New note content");
-//     addTaskForTesting(createTask, 1); // Priority value is not used for special tasks.
+//     addTaskForTesting(createTask);
     
 //     ExtendedTask pingTask2(PING, 0, 0, "");
-//     addTaskForTesting(pingTask2, 5);
+//     addTaskForTesting(pingTask2);
     
 //     std::this_thread::sleep_for(std::chrono::seconds(2));
 //     stopDispatcher();

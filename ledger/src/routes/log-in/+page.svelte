@@ -1,41 +1,62 @@
-<!-- ledger/src/routes/log-in/+page.svelte -->
 <script lang="ts">
-  import { getContext } from 'svelte';
-  
-  // Get the showConnectionError function from context
-  const showConnectionError = getContext('showConnectionError') as () => void;
+  import {
+    Button,
+    Card,
+    CardBody,
+    CardTitle,
+    Col,
+    Container,
+    Form,
+    FormGroup,
+    Input,
+    Label,
+    Row
+  } from '@sveltestrap/sveltestrap';
 
   let username = '';
   let password = '';
 
   async function handleLogin() {
-    try {
-      const res = await fetch(`${import.meta.env.PUBLIC_API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      if (!res.ok) {
-        throw new Error('Server responded with an error');
-      }
-      // Handle successful login...
-    } catch (error) {
-      console.error('Connection error:', error);
-      showConnectionError(); // Trigger the error modal
-    }
+    // Replace with your actual login logic
+    console.log('Attempting to log in with:', username, password);
   }
 </script>
 
-<form on:submit|preventDefault={handleLogin}>
-  <label>
-    Username:
-    <input type="text" bind:value={username} required />
-  </label>
-  <br />
-  <label>
-    Password:
-    <input type="password" bind:value={password} required />
-  </label>
-  <br />
-  <button type="submit">Log In</button>
-</form>
+<Container class="vh-100 d-flex justify-content-center align-items-center">
+  <Row class="w-100">
+    <Col sm="12" md="10" lg="6" xl="5" class="mx-auto">
+      <Card class="p-3 shadow-sm">
+        <CardBody>
+          <CardTitle class="mb-4 text-center">
+            <h2 class="m-0">Log In</h2>
+          </CardTitle>
+          <Form on:submit={(e) => { e.preventDefault(); handleLogin(); }}>
+            <FormGroup>
+              <Label for="username">Username</Label>
+              <Input id="username" type="text" bind:value={username} required />
+            </FormGroup>
+            <FormGroup>
+              <Label for="password">Password</Label>
+              <Input id="password" type="password" bind:value={password} required />
+            </FormGroup>
+            <Button color="primary" type="submit" class="mt-3 w-100">
+              Log In
+            </Button>
+          </Form>
+        </CardBody>
+      </Card>
+    </Col>
+  </Row>
+</Container>
+
+<style>
+  /* Ensure the container takes up full viewport height */
+  .vh-100 {
+    height: 100vh;
+  }
+  /* Optional: Increase card padding and set a max-width for a larger look */
+  .card {
+    max-width: 500px;
+    margin: auto;
+  }
+</style>

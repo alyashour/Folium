@@ -192,6 +192,14 @@ def get_classes():
         abort(404)
     return jsonify({"classes": classes}), 200
 
+@app.route("/api/me/classes/<class_id>/bignote", methods=["GET"])
+def get_class_bignote(class_id):
+    """Return the full 'big note' for a specific class."""
+    note = BIG_NOTES.get(class_id)
+    if not note:
+        return jsonify({"status": "error", "message": "Class not found"}), 404
+    return jsonify({"status": "ok", "classId": class_id, "note": note}), 200
+
 if __name__ == "__main__":
     # Running on all interfaces on port 3001
     app.run(host="0.0.0.0", port=3001)

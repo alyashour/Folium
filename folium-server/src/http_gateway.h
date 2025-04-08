@@ -14,20 +14,38 @@
 #ifndef FOLSERV_HTTP_GATEWAY_H_
 #define FOLSERV_HTTP_GATEWAY_H_
 
+#include "httplib.h"
+
 #include <string>
+#include <thread>
+#include <atomic>
 
-namespace Gateway {
-    /**
-     * @brief Start listening for incoming HTTP requests.
-     * @param ip The IP address to bind the server to.
-     * @param port The port to listen on.
-     */
-    void listen(std::string ip, int port);
+namespace gateway
+{
+    class Gateway
+    {
+    private:
+        std::thread serverThread;
+        httplib::Server svr;
 
-    /**
-     * @brief Stops the running server.
-     */
-    void stop();
+        void initializeRoutes();
+
+    public:
+        Gateway();
+        ~Gateway();
+
+        /**
+         * @brief Start listening for incoming HTTP requests in another thread.
+         * @param ip The IP address to bind the server to.
+         * @param port The port to listen on.
+         */
+        void listen(std::string ip, int port);
+
+        /**
+         * @brief Stops the running server.
+         */
+        void stop();
+    };
 }
 
 #endif // FOLSERV_HTTP_GATEWAY_H_

@@ -107,6 +107,15 @@ if(NOT MYSQLCPPCONN_LIB)
     message(FATAL_ERROR "MySQL Connector/C++ library not found")
 endif()
 
+# Find MySQL C client library
+find_library(MYSQLCLIENT_LIB 
+    NAMES mysqlclient
+    PATHS /opt/homebrew/lib /usr/local/lib
+)
+if(NOT MYSQLCLIENT_LIB)
+    message(FATAL_ERROR "MySQL C client library (libmysqlclient) not found")
+endif()
+
 # Link dependencies
 target_link_libraries(folium-core PUBLIC 
     nlohmann_json::nlohmann_json

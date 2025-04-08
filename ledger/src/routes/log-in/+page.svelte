@@ -87,13 +87,3 @@
     </Col>
   </Row>
 </Container>
-
-<style>
-  .vh-100 {
-    height: 100vh;
-  }
-  .card {
-    max-width: 500px;
-    margin: auto;
-  }
-</style>

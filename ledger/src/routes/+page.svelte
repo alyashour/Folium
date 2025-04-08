@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { Button } from '@sveltestrap/sveltestrap';
     import { PUBLIC_API_BASE_URL } from '$env/static/public';
+    import { Button } from '@sveltestrap/sveltestrap';
+    import { onMount } from 'svelte';
 
     let classes: Array<{ id: string; title: string }> = [];
     let loading: boolean = true;

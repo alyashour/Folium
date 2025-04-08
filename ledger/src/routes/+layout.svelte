@@ -5,31 +5,54 @@
   import Footer from '$lib/components/Footer.svelte';
   import Navbar from '$lib/components/Navbar.svelte';
   import Notification from '$lib/components/Notification.svelte';
+  import { setContext } from 'svelte';
+  import { writable } from 'svelte/store';
 
-  let globalError = false;
+  // Create a writable store that tracks whether a connection error exists.
+  const connectionError = writable(false);
 
-  // These functions are used by FetchOverride to set error state for any fetch failures.
+  /**
+   * showConnectionError sets the connection error state to true.
+   * Components (e.g. login) can call this function (from context) if necessary.
+   */
+  function showConnectionError() {
+    connectionError.set(true);
+  }
+
+  // Provide showConnectionError via context so that child components can trigger it.
+  setContext('showConnectionError', showConnectionError);
+
+  /**
+   * handleFetchError is called when FetchOverride dispatches an "error" event.
+   * This indicates a network failure or a 500-level server error.
+   */
   function handleFetchError() {
-    globalError = true;
+    connectionError.set(true);
   }
 
+  /**
+   * handleFetchSuccess is called when FetchOverride dispatches a "success" event.
+   * For our purposes we don’t auto-clear the error so that only an explicit retry will remove it.
+   */
   function handleFetchSuccess() {
-    // Optionally, you can set globalError = false here if you want to auto-hide on a success.
-    // For now, we won't override the user's manual retry action.
+    // Optionally clear the error on success—but here we leave it as-is until the user retries.
   }
 
-  // Retry function that tries to ping the server immediately.
+  /**
+   * retry pings the server using PUBLIC_LEDGER_PING_URL. If the ping is successful,
+   * it clears the connection error.
+   */
   async function retry() {
-    globalError = false; // hide modal before retrying
+    connectionError.set(false);
     try {
       const res = await fetch(PUBLIC_LEDGER_PING_URL);
       if (!res.ok) {
-        globalError = true; // if ping fails, show modal again
+        connectionError.set(true);
       } else {
-        globalError = false; // connection is back up
+        connectionError.set(false);
       }
     } catch (error) {
-      globalError = true; // if error during fetch, re-show modal
+      connectionError.set(true);
     }
   }
 </script>
@@ -37,11 +60,12 @@
 <div class="layout-container">
   <Navbar />
 
-  <!-- This component overrides fetch on the client side -->
-  <FetchOverride onError={handleFetchError} onSuccess={handleFetchSuccess} />
+  <!-- Mount the FetchOverride component so that its customFetch events bubble up -->
+  <FetchOverride on:error={handleFetchError} on:success={handleFetchSuccess} />
 
-  {#if globalError}
-    <Notification onRetry={retry} />
+  {#if $connectionError}
+    <!-- Display the connection error notification with a retry callback -->
+    <Notification on:retry={retry} />
   {/if}
 
   <main class="site-main">

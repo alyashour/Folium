@@ -29,7 +29,7 @@ std::string static getHeader() {
 
 void Logger::log(std::string s) {
    // add a period if it doesn't end with one
-   if (!s.ends_with('.')) {
+   if (!s.ends_with('.') && !s.ends_with('!')) {
       s += ".";
    }
 

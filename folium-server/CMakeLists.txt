@@ -116,14 +116,32 @@ add_dependencies(folium-server version-info)
 
 ## TESTING ##
 enable_testing()
-add_executable(tests
-    tests/test_logger.cc
-    tests/test_core.cc
-    tests/test_dispatcher.cc
-)
-target_link_libraries(tests PRIVATE folium-core gtest gtest_main)
-target_compile_definitions(tests PRIVATE DISPATCHER_TEST)
-add_test(NAME AllTests COMMAND tests)
+
+# Auth (NOT YET IMPLEMENTED)
+# add_executable(auth_test tests/test_auth.cc)
+# target_link_libraries(auth_test PRIVATE folium-core gtest gtest_main)
+# add_test(NAME auth_test COMMAND auth_test)
+
+# Core
+add_executable(core_test tests/test_core.cc)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME core_test COMMAND log_test)
+
+# Gateway
+add_executable(gateway_test tests/test_gateway.cc)
+target_link_libraries(gateway_test PRIVATE folium-core gtest gtest_main httplib)
+add_test(NAME gateway_test COMMAND gateway_test)
+
+# Logging
+add_executable(log_test tests/test_logger.cc)
+target_link_libraries(log_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME log_test COMMAND log_test)
+
+# Dispatcher
+add_executable(dispatcher_test tests/test_dispatcher.cc)
+target_compile_definitions(dispatcher_test PRIVATE DISPATCHER_TEST)
+target_link_libraries(dispatcher_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME dispatcher_test COMMAND dispatcher_test)
 
 # Installation rules
 install(TARGETS folium-server DESTINATION bin)

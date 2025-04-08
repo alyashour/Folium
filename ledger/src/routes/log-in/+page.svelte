@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { PUBLIC_API_BASE_URL } from '$env/static/public';
   import {
     Button,
     Card,
@@ -12,13 +14,49 @@
     Label,
     Row
   } from '@sveltestrap/sveltestrap';
+  import { getContext } from 'svelte';
+
+  // Get the function from context to show the connection error modal
+  const showConnectionError = getContext('showConnectionError') as () => void;
 
   let username = '';
   let password = '';
 
   async function handleLogin() {
-    // Replace with your actual login logic
     console.log('Attempting to log in with:', username, password);
+    console.log('PUBLIC_API_BASE_URL =', PUBLIC_API_BASE_URL);
+
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          console.log("Invalid credentials");
+          alert("Invalid username or password");
+        } else if (res.status >= 500) {
+          console.log("Server error occurred");
+          showConnectionError();
+        } else {
+          console.log(`Server responded with status ${res.status}`);
+          alert("Login failed with status " + res.status);
+        }
+        return;
+      }
+
+      const data = await res.json();
+      console.log("Login successful:", data);
+      
+      // Handle success: store token if needed, then redirect to main page
+      goto("/"); // Redirect to the main page
+
+    } catch (err) {
+      console.error("Network error => unreachable server", err);
+      showConnectionError();
+    }
   }
 </script>
 
@@ -50,11 +88,9 @@
 </Container>
 
 <style>
-  /* Ensure the container takes up full viewport height */
   .vh-100 {
     height: 100vh;
   }
-  /* Optional: Increase card padding and set a max-width for a larger look */
   .card {
     max-width: 500px;
     margin: auto;

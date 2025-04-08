@@ -7,7 +7,7 @@ using json = nlohmann::json;
 void setup_routes(httplib::Server& svr) {
 
     // Register
-    svr.Post("/register", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/auth/register", [](const httplib::Request& req, httplib::Response& res) {
         try {
             auto data = json::parse(req.body);
             std::string username = data["username"];
@@ -26,7 +26,7 @@ void setup_routes(httplib::Server& svr) {
     });
 
     // Login
-    svr.Post("/login", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/auth/login", [](const httplib::Request& req, httplib::Response& res) {
         try {
             auto data = json::parse(req.body);
             std::string username = data["username"];
@@ -47,7 +47,7 @@ void setup_routes(httplib::Server& svr) {
     });
 
     // Logout
-    svr.Post("/logout", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/auth/logout", [](const httplib::Request& req, httplib::Response& res) {
         try {
             auto data = json::parse(req.body);
             std::string username = data["username"];
@@ -60,7 +60,7 @@ void setup_routes(httplib::Server& svr) {
     });
 
     // Token Validation
-    svr.Post("/validate", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/auth/validate", [](const httplib::Request& req, httplib::Response& res) {
         try {
             auto data = json::parse(req.body);
             std::string token = data["token"];
@@ -73,7 +73,7 @@ void setup_routes(httplib::Server& svr) {
     });
 
     // Token Refresh
-    svr.Post("/refresh", [](const httplib::Request& req, httplib::Response& res) {
+    svr.Post("/auth/refresh", [](const httplib::Request& req, httplib::Response& res) {
         try {
             auto data = json::parse(req.body);
             std::string token = data["token"];
@@ -90,4 +90,49 @@ void setup_routes(httplib::Server& svr) {
             res.set_content(R"({"error": "Invalid request format"})", "application/json");
         }
     });
+
+    //
+    svr.Post("/auth/change-password", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto data = json::parse(req.body);
+            std::string username = data["username"];
+            std::string oldPassword = data["old_password"];
+            std::string newPassword = data["new_password"];
+    
+            if (Auth::changePassword(username, oldPassword, newPassword)) {
+                res.set_content(R"({"status": "Password changed successfully"})", "application/json");
+            } else {
+                res.status = 403;
+                res.set_content(R"({"error": "Password change failed"})", "application/json");
+            }
+        } catch (...) {
+            res.status = 400;
+            res.set_content(R"({"error": "Invalid request format"})", "application/json");
+        }
+    });
+
+    svr.Post("/auth/secure-action", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            auto data = json::parse(req.body);
+            std::string username = data["username"];
+            std::string token = data["token"];
+    
+            if (!Auth::validateToken(token)) {
+                res.status = 403;
+                res.set_content(R"({"error": "Invalid token"})", "application/json");
+                return;
+            }
+    
+            if (Auth::checkPermissions(username, Auth::CAN_CREATE_NOTE, Auth::USER)) {
+                res.set_content(R"({"status": "Permission granted"})", "application/json");
+            } else {
+                res.status = 403;
+                res.set_content(R"({"error": "Permission denied"})", "application/json");
+            }
+        } catch (...) {
+            res.status = 400;
+            res.set_content(R"({"error": "Invalid request format"})", "application/json");
+        }
+    });
+    
 }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
 project(FoliumServer VERSION 0.1.0 LANGUAGES CXX)
 
-# Set default build type (if not already set)
+# Set default build type if not already set
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
@@ -33,14 +33,14 @@ endif()
 # Generate build date
 string(TIMESTAMP BUILD_DATE "%Y-%m-%d" UTC)
 
-# Configure
+# Configure version header
 configure_file(
     ${CMAKE_SOURCE_DIR}/src/version.h.in 
     ${CMAKE_BINARY_DIR}/generated/version.h 
     @ONLY
 )
 
-# Include the generated dir
+# Include the generated directory for version info
 include_directories(${CMAKE_BINARY_DIR}/generated)
 
 ## INSTALL PACKAGES ##
@@ -72,7 +72,7 @@ FetchContent_MakeAvailable(googletest httplib json)
 
 ## SET UP EXECUTABLE ##
 
-# Source code lib
+# Build the core library
 add_library(folium-core
     src/auth.cc
     src/core.cc
@@ -80,40 +80,47 @@ add_library(folium-core
     src/dispatcher.cc
     src/http_gateway.cc
     src/logger.cc
+    src/pipe-filter.cc
 )
 
 # Set include directories for the library
 target_include_directories(folium-core PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src 
+    /usr/include/mysql-cppconn  # MySQL Connector/C++ headers
 )
 
+# Find the MySQL Connector/C++ library; adjust the path if needed
+find_library(MYSQLCPPCONN_LIB 
+    NAMES mysqlcppconnx mysqlcppconn
+    PATHS   /usr/lib/x86_64-linux-gnu
+            /opt/homebrew/opt/mysql-connector-c++/lib
+            /opt/homebrew/lib
+)
+if(NOT MYSQLCPPCONN_LIB)
+    message(FATAL_ERROR "MySQL Connector/C++ library not found")
+endif()
+
+# Link dependencies
 target_link_libraries(folium-core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(folium-core PUBLIC httplib)
+target_link_libraries(folium-core PUBLIC ${MYSQLCPPCONN_LIB})
 
-# Add the executable
+# Create the server executable
 add_executable(folium-server src/main.cc)
 target_link_libraries(folium-server PRIVATE folium-core)
 
-
-# Force a rebuild on new version
+# Force rebuild on new version
 add_custom_target(version-info DEPENDS ${CMAKE_BINARY_DIR}/generated/version.h)
 add_dependencies(folium-server version-info)
 
 ## TESTING ##
-# Enable testing
 enable_testing()
-
-# Add the test executable
 add_executable(tests
     tests/test_logger.cc
     tests/test_core.cc
 )
-
-# Link against your library and Google Test
 target_link_libraries(tests PRIVATE folium-core gtest gtest_main)
-
-# Add the test to CTest
 add_test(NAME AllTests COMMAND tests)
 
 # Installation rules

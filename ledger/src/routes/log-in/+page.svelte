@@ -23,41 +23,42 @@
   let password = '';
 
   async function handleLogin() {
-    console.log('Attempting to log in with:', username, password);
-    console.log('PUBLIC_API_BASE_URL =', PUBLIC_API_BASE_URL);
+  console.log('Attempting to log in with:', username, password);
+  try {
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
 
-    try {
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          console.log("Invalid credentials");
-          alert("Invalid username or password");
-        } else if (res.status >= 500) {
-          console.log("Server error occurred");
-          showConnectionError();
-        } else {
-          console.log(`Server responded with status ${res.status}`);
-          alert("Login failed with status " + res.status);
-        }
-        return;
+    if (!res.ok) {
+      if (res.status === 401) {
+        console.log("Invalid credentials");
+        alert("Invalid username or password");
+      } else if (res.status >= 500) {
+        console.log("Server error occurred");
+        showConnectionError();
+      } else {
+        console.log(`Server responded with status ${res.status}`);
+        alert("Login failed with status " + res.status);
       }
-
-      const data = await res.json();
-      console.log("Login successful:", data);
-      
-      // Handle success: store token if needed, then redirect to main page
-      goto("/"); // Redirect to the main page
-
-    } catch (err) {
-      console.error("Network error => unreachable server", err);
-      showConnectionError();
+      return;
     }
+
+    const data = await res.json();
+    console.log("Login successful:", data);
+
+    // Store the token and username so your Navbar can pick them up
+    sessionStorage.setItem("userToken", data.token);
+    sessionStorage.setItem("username", username);
+
+    // Redirect to the main page after login
+    goto("/");
+  } catch (err) {
+    console.error("Network error => unreachable server", err);
+    showConnectionError();
   }
+}
 </script>
 
 <Container class="vh-100 d-flex justify-content-center align-items-center">

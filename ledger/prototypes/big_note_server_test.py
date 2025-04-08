@@ -1,13 +1,16 @@
 """
 Prototype Python Server for Folium
 
-This server implements basic authentication endpoints:
+Endpoints:
   - /ping: Health check endpoint.
-  - /api/auth/register: Endpoint to register a new user.
-  - /api/auth/login: Endpoint to login an existing user.
-  - /api/me/classes: Endpoint to return available class information.
+  - /api/auth/register: Register a new user.
+  - /api/auth/login: Login an existing user and return a dummy token.
+  - /api/auth/validate: Validate an existing token (expects the token in the Authorization header as "Bearer <token>").
+  - /api/auth/refresh: Refresh an expired token.
+  - /api/auth/change-password: Change a user's password.
+  - /api/me/classes: Return available class information.
 
-It also seeds a default user ("admin" with password "password") if not already present.
+The server seeds a default user ("admin" with password "password") if not already present.
 """
 
 from flask import Flask, request, jsonify, abort
@@ -22,7 +25,7 @@ users = {}
 def seed_default_user():
     """Seed with default user if not already present."""
     if "admin" not in users:
-        # Default password is "password"; in production, use secure password hashing!
+        # Default password is "password"; in production, use proper password hashing!
         users["admin"] = {"password": "password", "role": "admin"}
         print("Default user 'admin' seeded.")
 
@@ -35,9 +38,8 @@ def ping():
 
 @app.route("/api/auth/register", methods=["POST"])
 def register():
-    """
-    Register a new user.
-    Expects JSON payload with 'username' and 'password'.
+    """Register a new user.
+       Expects JSON with 'username' and 'password'.
     """
     data = request.get_json()
     if not data:
@@ -53,10 +55,9 @@ def register():
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
-    """
-    Login an existing user.
-    Expects JSON payload with 'username' and 'password'.
-    Returns a dummy token if successful.
+    """Login an existing user.
+       Expects JSON with 'username' and 'password'.
+       Returns a dummy token if successful.
     """
     data = request.get_json()
     if not data:
@@ -68,13 +69,70 @@ def login():
     
     user = users.get(username)
     if user and user["password"] == password:
-        # In a real server, you'd return a JWT or similar token
+        # In a real application, generate and sign a proper JWT token.
         token = f"token_for_{username}"
         return jsonify({"status": "ok", "token": token, "role": user["role"]}), 200
     else:
         return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
-# Dummy data for classes (similar to your existing BIG_NOTES)
+@app.route("/api/auth/validate", methods=["GET"])
+def validate_token():
+    """
+    Validate an authentication token.
+    Expects the token in the Authorization header as "Bearer <token>".
+    For this dummy server, a token is valid if it starts with "token_for_".
+    """
+    auth_header = request.headers.get("Authorization", None)
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"status": "error", "message": "Missing or invalid token header"}), 401
+
+    token = auth_header.split(" ")[1]
+    if token.startswith("token_for_"):
+        return jsonify({"status": "ok", "message": "Token is valid"}), 200
+    else:
+        return jsonify({"status": "error", "message": "Invalid token"}), 401
+
+@app.route("/api/auth/refresh", methods=["POST"])
+def refresh_token():
+    """
+    Refresh an expired token.
+    Expects JSON with 'token'. For this prototype, simply append "_refreshed".
+    """
+    data = request.get_json()
+    if not data:
+        abort(400, description="Invalid JSON")
+    old_token = data.get("token")
+    if not old_token or not old_token.startswith("token_for_"):
+        return jsonify({"status": "error", "message": "Invalid token provided"}), 401
+    
+    new_token = old_token + "_refreshed"
+    return jsonify({"status": "ok", "token": new_token}), 200
+
+@app.route("/api/auth/change-password", methods=["POST"])
+def change_password():
+    """
+    Change a user's password.
+    Expects JSON with 'username', 'old_password', and 'new_password'.
+    """
+    data = request.get_json()
+    if not data:
+        abort(400, description="Invalid JSON")
+    username = data.get("username")
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+    if not username or not old_password or not new_password:
+        abort(400, description="Missing required fields")
+    
+    user = users.get(username)
+    if not user:
+        return jsonify({"status": "error", "message": "User not found"}), 404
+    if user["password"] != old_password:
+        return jsonify({"status": "error", "message": "Old password is incorrect"}), 401
+    # Update password (for prototype, storing as plain text)
+    users[username]["password"] = new_password
+    return jsonify({"status": "ok", "message": "Password changed successfully"}), 200
+
+# Dummy data for classes (for /api/me/classes)
 BIG_NOTES = {
     "math101": {
         "title": "Mathematics 101",
@@ -135,5 +193,5 @@ def get_classes():
     return jsonify({"classes": classes}), 200
 
 if __name__ == "__main__":
-    # Running on all interfaces on port 3001 (adjust if needed)
+    # Running on all interfaces on port 3001
     app.run(host="0.0.0.0", port=3001)

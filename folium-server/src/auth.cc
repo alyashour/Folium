@@ -1,155 +1,137 @@
 #include "auth.h"
-#include <mysql_driver.h>
-#include <mysql_connection.h>
-#include <cppconn/statement.h>
-#include <cppconn/resultset.h>
-#include <cppconn/exception.h>
-#include <cppconn/prepared_statement.h>
-#include <memory>
 #include <iostream>
-#include <fstream>
-#include <nlohmann/json.hpp>  // Make sure this header is available
+#include <string>
+#include <unordered_map>
 
-using json = nlohmann::json;
+// A simple User structure to store the hashed password and role.
+struct User {
+    std::string password;  // In production, store securely hashed password.
+    Auth::Role role;
+};
+
+// In-memory store for users.
+static std::unordered_map<std::string, User> users;
+
+// Helper to seed the default admin user at startup.
+static void initDefaultUser() {
+    if (users.find("admin") == users.end()) {
+        // For the prototype, the default admin password is "password".
+        users["admin"] = { Auth::hashPassword("password"), Auth::ADMIN };
+        std::cout << "Default admin user seeded." << std::endl;
+    }
+}
 
 namespace Auth {
 
-    struct MySQLConfig {
-        std::string host;
-        int port;
-        std::string user;
-        std::string password;
-        std::string database;
-    };
-
-    // Helper function to load MySQL configuration from dbConfig.json
-    MySQLConfig loadDbConfig(const std::string& configFile = "../dbConfig.json") {
-        MySQLConfig config;
-        std::ifstream file(configFile);
-        if (!file.is_open()) {
-            throw std::runtime_error("Could not open config file: " + configFile);
-        }
-        json j;
-        file >> j;
-        config.host = j.value("mysql_host", "127.0.0.1");
-        config.port = j.value("mysql_port", 3306);
-        config.user = j.value("mysql_user", "root");
-        config.password = j.value("mysql_password", "");
-        config.database = j.value("mysql_database", "folium");
-        return config;
-    }
-
-    // Helper function to get a MySQL connection using configuration from dbConfig.json
-    std::unique_ptr<sql::Connection> getConnection() {
-        try {
-            MySQLConfig config = loadDbConfig(); // load config from file
-            sql::mysql::MySQL_Driver *driver = sql::mysql::get_mysql_driver_instance();
-            std::string connectionString = "tcp://" + config.host + ":" + std::to_string(config.port);
-            std::unique_ptr<sql::Connection> conn(
-                driver->connect(connectionString, config.user, config.password)
-            );
-            conn->setSchema(config.database); // Use your database name
-            return conn;
-        } catch (sql::SQLException &e) {
-            std::cerr << "SQLException in getConnection(): " << e.what() << std::endl;
-            throw;
-        }
-    }
-
+    // Checks the credentials for the given user.
     bool check_credentials(const std::string& username, const std::string& password) {
-        try {
-            auto conn = getConnection();
-            std::unique_ptr<sql::PreparedStatement> pstmt(
-                conn->prepareStatement("SELECT password FROM users WHERE username = ?")
-            );
-            pstmt->setString(1, username);
-            std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-            if (res->next()) {
-                std::string storedPassword = res->getString("password");
-                // For now, we simply compare plain text; in production, use proper hashing.
-                return storedPassword == password;
-            }
-            return false;
-        } catch (sql::SQLException &e) {
-            std::cerr << "SQLException in check_credentials: " << e.what() << std::endl;
-            return false;
+        auto it = users.find(username);
+        if (it != users.end()) {
+            return verifyPassword(it->second.password, password);
         }
+        return false;
     }
 
+    // Begins a user's session.
     void login(const std::string& username) {
-        std::cout << "User " << username << " logged in (MySQL backend)." << std::endl;
+        std::cout << "User " << username << " logged in." << std::endl;
+        // In a real system, you would start a session or log this event.
     }
 
+    // Terminates the user's session.
     void logout(const std::string& username) {
-        std::cout << "User " << username << " logged out (MySQL backend)." << std::endl;
+        std::cout << "User " << username << " logged out." << std::endl;
+        // Here you would clean up session data.
     }
 
+    // Registers a new user. Returns true if registration succeeds.
     bool registerUser(const std::string& username, const std::string& password) {
-        try {
-            auto conn = getConnection();
-            // Check if user already exists
-            std::unique_ptr<sql::PreparedStatement> pstmt(
-                conn->prepareStatement("SELECT COUNT(*) AS count FROM users WHERE username = ?")
-            );
-            pstmt->setString(1, username);
-            std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-            if (res->next() && res->getInt("count") > 0) {
-                return false;
-            }
-            // Insert new user with default role "user" (or "admin" if desired)
-            pstmt.reset(conn->prepareStatement("INSERT INTO users (username, password, role) VALUES (?, ?, ?)"));
-            pstmt->setString(1, username);
-            pstmt->setString(2, password); // In production, hash the password
-            pstmt->setString(3, (username == "admin") ? "admin" : "user");
-            pstmt->executeUpdate();
-            return true;
-        } catch (sql::SQLException &e) {
-            std::cerr << "SQLException in registerUser: " << e.what() << std::endl;
+        if (users.find(username) != users.end()) {
+            std::cerr << "User " << username << " already exists." << std::endl;
             return false;
         }
-    }
-
-    bool validateToken(const std::string& token) {
-        // Placeholder implementation for JWT validation
+        users[username] = { hashPassword(password), Auth::USER };
+        std::cout << "User " << username << " registered successfully." << std::endl;
         return true;
     }
 
+    // Validates a token.
+    // For this prototype, a token is considered valid if it begins with "token_for_".
+    bool validateToken(const std::string& token) {
+        return token.find("token_for_") == 0;
+    }
+
+    // Refreshes an expired token by appending "_refreshed" to it.
     std::string refreshToken(const std::string& token) {
-        // Placeholder: simply append a suffix
-        return token + "_refreshed";
+        if (validateToken(token)) {
+            return token + "_refreshed";
+        }
+        return "";
     }
 
+    // A naive hash function that prepends "hashed_" to a password.
+    // WARNING: This is only for prototyping purposes.
     std::string hashPassword(const std::string& password) {
-        // In production, implement a proper hashing function
-        return password;
+        return "hashed_" + password;
     }
 
+    // Verifies a plaintext password against a stored hashed password.
     bool verifyPassword(const std::string& hashedPassword, const std::string& plainPassword) {
-        return hashedPassword == plainPassword;
+        return hashedPassword == hashPassword(plainPassword);
     }
 
+    // Returns the role of a user. Defaults to USER if not found.
     Role getUserRole(const std::string& username) {
-        try {
-            auto conn = getConnection();
-            std::unique_ptr<sql::PreparedStatement> pstmt(
-                conn->prepareStatement("SELECT role FROM users WHERE username = ?")
-            );
-            pstmt->setString(1, username);
-            std::unique_ptr<sql::ResultSet> res(pstmt->executeQuery());
-            if (res->next()) {
-                std::string roleStr = res->getString("role");
-                if (roleStr == "admin")
-                    return ADMIN;
-            }
-        } catch (sql::SQLException &e) {
-            std::cerr << "SQLException in getUserRole: " << e.what() << std::endl;
+        auto it = users.find(username);
+        if (it != users.end()) {
+            return it->second.role;
         }
         return USER;
     }
 
+    // Checks whether the given user has the required permission based on role.
+    // For demonstration, ADMINs have all permissions; for USERs, only CAN_CREATE_NOTE is allowed.
     bool checkPermissions(const std::string& username, const Permission permission, const Role role) {
-        if (getUserRole(username) == ADMIN)
+        auto it = users.find(username);
+        if (it == users.end()) {
+            return false;
+        }
+        if (it->second.role != role) {
+            return false;
+        }
+        if (role == ADMIN) {
             return true;
+        }
+        if (role == USER) {
+            // For now, only CAN_CREATE_NOTE is allowed for USER.
+            return (permission == CAN_CREATE_NOTE);
+        }
         return false;
     }
-}
+
+    // Additional function for changing the password.
+    // Returns true if the password was changed successfully.
+    bool changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword) {
+        auto it = users.find(username);
+        if (it == users.end()) {
+            std::cerr << "User " << username << " not found." << std::endl;
+            return false;
+        }
+        if (!verifyPassword(it->second.password, oldPassword)) {
+            std::cerr << "Old password is incorrect for user " << username << std::endl;
+            return false;
+        }
+        it->second.password = hashPassword(newPassword);
+        std::cout << "Password changed successfully for user " << username << std::endl;
+        return true;
+    }
+
+} // namespace Auth
+
+// Static initializer to seed the default admin user upon module load.
+struct AuthInitializer {
+    AuthInitializer() {
+        initDefaultUser();
+    }
+};
+static AuthInitializer initializer;

@@ -98,6 +98,13 @@ namespace Auth{
      * @return true if the user has the required permissions
      */
     bool checkPermissions(const std::string& username, const Permission permission, const Role role);
+
+    /**
+     * @brief Checks if this user is logged in in the auth system.
+     * @note Function implementation should be pure.
+     * @param username The username of the user.
+     */
+    bool isLoggedIn(const std::string& username);
 }
 
 #endif

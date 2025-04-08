@@ -9,8 +9,7 @@
 using namespace std;
 
 std::string ip = "127.0.0.1";
-// Use a valid port number (e.g., 9010 instead of 90105)
-std::string port = "9010";
+std::string port = "50105";
 unsigned int num_threads = 10;
 
 int main(void) {

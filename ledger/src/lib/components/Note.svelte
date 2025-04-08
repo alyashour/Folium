@@ -64,8 +64,8 @@
 {:else if error}
   <p>Error: {error}</p>
 {:else}
-  <h1>{data.bigNote.title}</h1>
-  {#each data.bigNote.units as unit (unit.unitId)}
+  <h1>{data.note.title}</h1>
+  {#each data.note.units as unit (unit.unitId)}
     <Unit title={unit.title} content={unit.content} />
   {/each}
 {/if}

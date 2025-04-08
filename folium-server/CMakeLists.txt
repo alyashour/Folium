@@ -119,8 +119,10 @@ enable_testing()
 add_executable(tests
     tests/test_logger.cc
     tests/test_core.cc
+    tests/test_dispatcher.cc
 )
 target_link_libraries(tests PRIVATE folium-core gtest gtest_main)
+target_compile_definitions(tests PRIVATE DISPATCHER_TEST)
 add_test(NAME AllTests COMMAND tests)
 
 # Installation rules

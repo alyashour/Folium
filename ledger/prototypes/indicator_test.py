@@ -1,6 +1,6 @@
 """
 This is used to check if the webapp server indicator (bottom right) works as intended.
-Run, set an env var as `PUBLIC_LEDGER_PING_URL=http://10.0.0.188:3001/ping` and check the indicator - it should be green.
+Run, set an env var as `PUBLIC_API_BASE_URL=http://127.0.0.1` and check the indicator - it should be green.
 """
 
 from flask import Flask, jsonify

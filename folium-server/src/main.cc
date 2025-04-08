@@ -14,7 +14,7 @@ int main(void)
     Logger::log("Starting Folium Server v" + Folium::VERSION);
     Logger::logS("Folium Server v", Folium::VERSION, " (build ", Folium::BUILD_ID, " ", Folium::BUILD_DATE, ")");
 
-    // Gateway::listen(ip, port);
+    Gateway::listen(ip, port);
 
     Logger::log("Done! Closing Folium Server.");
     return 0;

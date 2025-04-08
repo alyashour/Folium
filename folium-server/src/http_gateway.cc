@@ -1,5 +1,6 @@
 // #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "http_gateway.h"
+#include "api_routes.h"
 
 #include <atomic>
 #include <thread>
@@ -34,7 +35,9 @@ void Gateway::listen(std::string ip, int port)
             "text/plain"
         );
     });
-
+    // setuping the API routes
+    setup_routes(svr);
+    
     // Start server in a separate thread
     server_thread = std::thread([ip, port]() {
         Logger::log("Server starting on " + ip + ":" + std::to_string(port));

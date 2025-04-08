@@ -14,9 +14,19 @@ Then run the program using
 ## To setup MySQL DB
 
 1. Make sure you have MySQL installed.
+```shell
+mysql --version
+mysql -u root
+```
 2. Create a database for example named **"folium"**
+```sql
+CREATE DATABASE folium;
+```
 3. Use that database
-4. Run `source "direct/path/to/seed.sql"`
+```sql
+USE folium;
+```
+4. Run `SOURCE direct/path/to/seed.sql;`
 5. create a file named `dbConfig.json` on the root of folium-server and have the following content skeleton:
 
 ```json

@@ -23,6 +23,11 @@ namespace Gateway {
      * @param port The port to listen on.
      */
     void listen(std::string ip, int port);
+
+    /**
+     * @brief Stops the running server.
+     */
+    void stop();
 }
 
 #endif // FOLSERV_HTTP_GATEWAY_H_

@@ -65,16 +65,12 @@
     }
   </script>
   
-  <!-- Debug output -->
-  <!-- <pre>
-    {JSON.stringify(classes, null, 2)}
-  </pre> -->
   
   <Row class="mt-3">
     <!-- Left Column: Class Selector -->
     <Col md="2">
       <div class="header-row d-flex align-items-center justify-content-between">
-        <h5 class="mb-0"><a href="/">My Classes</a></h5>
+        <h5 class="mb-0"><a href="/classes">My Classes</a></h5>
         <Button color="secondary" size="sm" on:click={refreshClasses} title="Refresh">
           🔄
         </Button>

@@ -91,7 +91,12 @@ target_include_directories(folium-core PUBLIC
 )
 
 # Find the MySQL Connector/C++ library; adjust the path if needed
-find_library(MYSQLCPPCONN_LIB mysqlcppconn PATHS /usr/lib/x86_64-linux-gnu)
+find_library(MYSQLCPPCONN_LIB 
+    NAMES mysqlcppconnx mysqlcppconn
+    PATHS   /usr/lib/x86_64-linux-gnu
+            /opt/homebrew/opt/mysql-connector-c++/lib
+            /opt/homebrew/lib
+)
 if(NOT MYSQLCPPCONN_LIB)
     message(FATAL_ERROR "MySQL Connector/C++ library not found")
 endif()

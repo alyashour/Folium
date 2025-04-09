@@ -31,6 +31,7 @@ let joinMessage: string = "";
 
 let textSize = "medium";
 let colorMode: "light" | "dark" = "light";
+let widthMode: "wide" | "narrow" = "wide";
   
     function toggleTextSize() {
       textSizeDropdownOpen = !textSizeDropdownOpen;
@@ -113,6 +114,10 @@ function setTextSize(size: string) {
 function setColorMode(mode: "light" | "dark") {
   colorMode = mode;
 }
+
+function setWidthMode(mode: "wide" | "narrow") {
+  widthMode = mode;
+}
   </script>
   
   <div class="content-container {colorMode}">
@@ -185,7 +190,7 @@ function setColorMode(mode: "light" | "dark") {
     </Col>
   
     <!-- Main Column: Note Component -->
-    <Col md="8">
+    <Col md="8" class="note-container {widthMode}">
       <Note {classId} />
     </Col>
   
@@ -205,16 +210,17 @@ function setColorMode(mode: "light" | "dark") {
         </DropdownMenu>
       </Dropdown>
   
-      <!-- Width Dropdown -->
-      <Dropdown isOpen={widthDropdownOpen} toggle={toggleWidth} class="mt-2">
-        <DropdownToggle caret color="secondary" size="sm">
-          Width
-        </DropdownToggle>
-        <DropdownMenu>
-          <DropdownItem>Wide</DropdownItem>
-          <DropdownItem>Narrow</DropdownItem>
-        </DropdownMenu>
-      </Dropdown>
+<!-- Width Dropdown -->
+<Dropdown isOpen={widthDropdownOpen} toggle={toggleWidth} class="mt-2">
+  <DropdownToggle caret color="secondary" size="sm">
+    Width: {widthMode.charAt(0).toUpperCase() + widthMode.slice(1)}
+  </DropdownToggle>
+  <DropdownMenu>
+    <DropdownItem on:click={() => setWidthMode('wide')}>Wide</DropdownItem>
+    <DropdownItem on:click={() => setWidthMode('narrow')}>Narrow</DropdownItem>
+  </DropdownMenu>
+</Dropdown>
+
   
       <!-- Color Dropdown -->
       <Dropdown isOpen={colorDropdownOpen} toggle={toggleColor} class="mt-2">
@@ -360,5 +366,17 @@ function setColorMode(mode: "light" | "dark") {
 /* If your Note component already defines its colors, you may adjust there instead. */
 
 
+
+/* Adjust the note container width based on widthMode */
+.note-container.wide {
+  /* For wide mode, you might want to use the full width available */
+  max-width: 100%;
+}
+
+.note-container.narrow {
+  /* For narrow mode, limit the width of the Note display */
+  max-width: 60%;  /* adjust the value as desired */
+  margin: auto;      /* center it within the column */
+}
   </style>
   

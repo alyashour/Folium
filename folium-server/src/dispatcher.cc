@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include <condition_variable>
+#include <queue>
 
 #include "util.h"
 #include "logger.h"
@@ -15,8 +16,22 @@ using namespace dispatcher;
 
 constexpr double MIN_SLEEP = 2, MAX_SLEEP = 3; // seconds
 
+F_Task processTask(F_Task &task)
+{
+    Logger::logS("Processing task: ", task.type_);
+    
+    // Ensure PING tasks get proper responses
+    if (task.type_ == F_TaskType::PING) {
+        task.data_ = {{"status", "success"}, {"message", "pong from dispatch"}};
+        Logger::log("Created PING response with data payload");
+    }
+    
+    Logger::logS("Done processing task: ", task.type_);
+    return task;
+}
+
 Dispatcher::Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsigned int numThreads)
-    : in_(in), out_(out)
+    : in_(in), out_(out), running_(true)
 {
     // pong the gateway
     F_Task task;
@@ -36,130 +51,108 @@ void Dispatcher::createThreadPool(const unsigned int numThreads)
     // create the worker threads
     for (int i = 0; i < numThreads; i++)
     {
-        threadPool_.emplace_back(&Dispatcher::processInboundTasks, this);
+        threadPool_.emplace_back(&Dispatcher::processInboundTasks, this, i);
     }
+}
+
+// Worker thread function to process tasks
+void Dispatcher::processInboundTasks(int threadId)
+{
+    Logger::logS("Worker thread ", threadId, " started");
+    
+    while (running_)
+    {
+        F_Task task;
+        bool hasTask = false;
+        
+        // Get a task from the queue
+        {
+            std::unique_lock<std::mutex> lock(taskMutex_);
+            
+            // Wait until there's a task or we're shutting down
+            taskCV_.wait(lock, [this]() { 
+                return !taskQueue_.empty() || !running_; 
+            });
+            
+            // If we're shutting down and there are no tasks, exit
+            if (!running_ && taskQueue_.empty())
+                break;
+                
+            if (!taskQueue_.empty()) {
+                task = taskQueue_.top();
+                taskQueue_.pop();
+                hasTask = true;
+                task.threadId_ = threadId;
+                Logger::logS("Thread ", threadId, " picked up task of type: ", task.type_);
+            }
+        }
+        
+        // Process the task outside the lock
+        if (hasTask) {
+            F_Task response = processTask(task);
+            out_.send(response);
+            Logger::logS("Thread ", threadId, " completed task");
+        }
+    }
+    
+    Logger::logS("Worker thread ", threadId, " shutting down");
 }
 
 // Start the listening process
 void Dispatcher::start()
 {
-    std::vector<bool> threadBusy(threadPool_.size(), false);
-    std::vector<F_Task> currentTasks(threadPool_.size());
-    std::mutex taskMutex;
-    std::condition_variable taskCV;
-    running_ = true;
-
     // main loop to read from input
     while (running_)
     {
         F_Task task;
         in_.read(task);
         
-        // got a task! 
-        // should be debug
-        Logger::log("Task recieved at dispatch!");
+        Logger::log("Task received at dispatch!");
 
-        // if its a syskill task
+        // if it's a syskill task
         if (task.type_ == F_TaskType::SYSKILL)
         {
-            running_ = false;
+            Logger::log("Dispatch recieved kill signal.");
+            // Signal threads to shut down
+            {
+                std::unique_lock<std::mutex> lock(taskMutex_);
+                running_ = false;
+                taskCV_.notify_all();
+            }
             break;
         }
 
-        // assign it to an idle thread
-        std::unique_lock<std::mutex> lock(taskMutex);
-
-        // check for idle thread
-        int idleThreadId = -1;
-        for (int i = 0; i < threadBusy.size(); i++)
+        // Add the task to the queue for worker threads
         {
-            if (!threadBusy[i])
-            {
-                idleThreadId = i;
-                break;
-            }
-        }
-
-        if (idleThreadId != -1)
-        {
-            // assign task to idle thread
-            threadBusy[idleThreadId] = true;
-            currentTasks[idleThreadId] = task;
-
-            // signal thread to process task
-            taskCV.notify_one();
-        }
-        else
-        {
-            // no idle thread found
-            // add to queue based on priority
-            {
-                std::lock_guard<std::mutex> queueLock(queueMutex_);
+            std::unique_lock<std::mutex> lock(taskMutex_);
+            
+            // Check if we're at max capacity
+            if (taskQueue_.size() >= threadPool_.size()) {
+                Logger::log("WARN: Server too busy, dropping request...");
+                // Release lock before sending response
+                lock.unlock();
+                
+                // Return a message that the server is busy and the task was dropped
+                F_Task response(F_TaskType::ERROR);
+                response.data_ = {
+                    {"error", "Server busy! Request dropped, please try again later."}
+                };
+                out_.send(response);
+            } else {
+                // Add task to queue and notify a waiting thread
                 taskQueue_.push(task);
-            }
-
-            // check for preemption
-            int lowestPriorityThreadId = -1;
-            int lowestPriority = -1;
-
-            for (int i = 0; i < threadBusy.size(); i++)
-            {
-                if (threadBusy[i])
-                {
-                    int currentPriority = currentTasks[i].getPriority();
-                    if (lowestPriorityThreadId == -1 || currentPriority > lowestPriority)
-                    {
-                        lowestPriority = currentPriority;
-                        lowestPriorityThreadId = i;
-                    }
-                }
-            }
-
-            if (lowestPriorityThreadId != -1 &&
-                task.getPriority() < lowestPriority)
-            {
-                // signal the threads
+                taskCV_.notify_one();
+                Logger::log("Task added to queue");
             }
         }
     }
-}
-
-F_Task processTask(F_Task &task)
-{
-    Logger::logS("Processing task: ", task.type_);
-    Logger::logS("Done processing task: ", task.type_);
-
-    return task;
-}
-
-void Dispatcher::processInboundTasks()
-{
-    while (running_)
-    {
-        F_Task task;
-        bool hasTask = false;
-
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            if (!taskQueue_.empty())
-            {
-                task = taskQueue_.top();
-                taskQueue_.pop();
-                hasTask = true;
-            }
-        }
-
-        if (hasTask)
-        {
-            // process the task
-            F_Task result = processTask(task);
-
-            out_.send(result);
-        }
-        else
-        {
-            // no task is available, sleep to avoid busy waiting
-            util::randomSleep(MIN_SLEEP, MAX_SLEEP);
+    
+    // Wait for all threads to finish
+    for (auto& thread : threadPool_) {
+        if (thread.joinable()) {
+            thread.join();
         }
     }
+    
+    Logger::log("Dispatcher shut down");
 }

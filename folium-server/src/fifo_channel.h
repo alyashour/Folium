@@ -56,6 +56,14 @@ namespace ipc
         {
             ssize_t n = ::write(fd_, &task, sizeof(F_Task));
 
+            if (n == -1) {
+                Logger::logErr("FIFO Write Error");
+                throw std::runtime_error("FIFO Write Error.");
+            } else if (n != sizeof(F_Task)) {
+                Logger::logErr("Incomplete write to FIFO");
+                throw std::runtime_error("Incomplete write to FIFO.");
+            }
+        
             return n == sizeof(F_Task);
         }
 
@@ -74,9 +82,10 @@ namespace ipc
             return n == sizeof(F_Task);
         }
         
-        // Add this new method to check if data is available
-        bool hasData(int timeout_ms = 0) const
+        // Add timeout version of read method
+        bool read(F_Task &task, int timeout_ms)
         {
+            // Use poll to wait for data with timeout
             struct pollfd pfd;
             pfd.fd = fd_;
             pfd.events = POLLIN;
@@ -84,12 +93,22 @@ namespace ipc
             int res = poll(&pfd, 1, timeout_ms);
             
             if (res < 0) {
-                // Error occurred
+                // Error occurred in poll
+                Logger::logErr("Poll error in FIFO read");
                 return false;
             }
             
-            // Return true if POLLIN is set, indicating data available to read
-            return (res > 0) && (pfd.revents & POLLIN);
+            if (res == 0) {
+                // Timeout occurred
+                return false;
+            }
+            
+            // Data is available, perform the read
+            if (pfd.revents & POLLIN) {
+                return read(task); // Call the existing read method
+            }
+            
+            return false;
         }
 
     private:

@@ -278,28 +278,18 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
             return timeoutTask;
         }
 
-        // Check if data is available to read
-        if (in_.hasData(10))
-        { // Poll with 10ms timeout
-            // Read response
-            F_Task response;
-            bool read = in_.read(response);
-            if (!read)
-            {
-                Logger::log("Gateway: Failed to read response");
-                F_Task readErrorTask;
-                readErrorTask.type_ = F_TaskType::ERROR;
-                readErrorTask.data_ = {{"status", "error"}, {"message", "Failed to read response"}};
-                return readErrorTask;
-            }
+        // Use blocking read with timeout
+        F_Task response;
+        bool read = in_.read(response, 100); // Block for up to 100ms
+        if (read)
+        {
             return response; // Return the complete F_Task
         }
-
-        // Short sleep to prevent CPU hogging
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
 void Gateway::signal_shutdown() {
+    Logger::log("Sending shutdown signal to dispatch.");
     out_.send(F_Task(F_TaskType::SYSKILL));
+    Logger::log("Signal sent.");
 }

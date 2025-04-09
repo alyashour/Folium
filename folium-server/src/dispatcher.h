@@ -44,16 +44,18 @@ namespace dispatcher
     private:
         std::vector<std::thread> threadPool_;
         std::priority_queue<F_Task, std::vector<F_Task>, TaskComparator> taskQueue_;
+        std::mutex taskMutex_;
+        std::condition_variable taskCV_;
         std::atomic<bool> running_ = false; // tells the threads to stop
 
         std::mutex queueMutex_;
         ipc::FifoChannel in_, out_;
-
+        
         // initializes the thread pool
         void createThreadPool(const unsigned int numThreads);
 
         // the function that threads run
-        void processInboundTasks();
+        void processInboundTasks(int threadId);
     public:
         // Constructor now takes FIFO paths for requests and responses.
         Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsigned int numThreads);

@@ -8,18 +8,19 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,  -- A hashed password
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE classes (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
     name VARCHAR(100) NOT NULL,
     description TEXT,
     instructor VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE user_classes (
@@ -33,32 +34,32 @@ CREATE TABLE user_classes (
 
 CREATE TABLE notes (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    class_id INT NOT NULL UNIQUE,
+    class_id INT NOT NULL UNIQUE,  -- Each class has one and only one shared note.
     title VARCHAR(255) NOT NULL,
-    file_path VARCHAR(255) NOT NULL,
+    file_path VARCHAR(255) NOT NULL,  -- Stores the path to the shared note file.
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 );
 
 -- Insert sample users
-INSERT INTO users (username, email, password) VALUES 
-('john_doe', 'john@example.com', 'hashed_password_here'),
-('jane_doe', 'jane@example.com', 'hashed_password_here'),
-('michael_scott', 'michael@dundermifflin.com', 'hashed_password_here'),
-('pam_beesly', 'pam@dundermifflin.com', 'hashed_password_here'),
-('jim_halpert', 'jim@dundermifflin.com', 'hashed_password_here'),
-('dwight_schrute', 'dwight@dundermifflin.com', 'hashed_password_here'),
-('stanley_hudson', 'stanley@dundermifflin.com', 'hashed_password_here'),
-('kevin_malone', 'kevin@dundermifflin.com', 'hashed_password_here');
+INSERT INTO users (username, password) VALUES 
+('john_doe', 'hashed_password_here'),
+('jane_doe', 'hashed_password_here'),
+('michael_scott', 'hashed_password_here'),
+('pam_beesly', 'hashed_password_here'),
+('jim_halpert', 'hashed_password_here'),
+('dwight_schrute', 'hashed_password_here'),
+('stanley_hudson', 'hashed_password_here'),
+('kevin_malone', 'hashed_password_here');
 
--- Insert sample classes
-INSERT INTO classes (name, description, instructor) VALUES 
-('Operating Systems', 'Collaborative note for OS class covering processes, memory management, and synchronization.', 'Professor Smith'),
-('Database Systems', 'Shared note for database concepts such as SQL, transactions, and normalization.', 'Professor Johnson'),
-('Data Structures', 'Collective note on common data structures and algorithms.', 'Professor Williams'),
-('Computer Networks', 'Shared note for networking fundamentals and protocols.', 'Professor Brown'),
-('Algorithms', 'Collaborative space for algorithm design and analysis.', 'Professor Davis');
+-- Insert sample classes with a creator's user_id
+INSERT INTO classes (user_id, name, description, instructor) VALUES 
+(1, 'Operating Systems', 'Collaborative note for OS class covering processes, memory management, and synchronization.', 'Professor Smith'),
+(2, 'Database Systems', 'Shared note for database concepts such as SQL, transactions, and normalization.', 'Professor Johnson'),
+(3, 'Data Structures', 'Collective note on common data structures and algorithms.', 'Professor Williams'),
+(4, 'Computer Networks', 'Shared note for networking fundamentals and protocols.', 'Professor Brown'),
+(5, 'Algorithms', 'Collaborative space for algorithm design and analysis.', 'Professor Davis');
 
 -- Enroll users into classes (sample enrollments)
 -- Enroll all users into Operating Systems (class_id = 1)

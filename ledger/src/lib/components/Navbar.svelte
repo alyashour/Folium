@@ -140,7 +140,7 @@ function selectClass(cls: { id: string; title: string }) {
       {:else}
         <!-- Not logged in: Show Create Account + Log In -->
         <NavItem>
-          <NavLink href="/create-account">
+          <NavLink href="/register">
             <Button color="primary">Create Account</Button>
           </NavLink>
         </NavItem>

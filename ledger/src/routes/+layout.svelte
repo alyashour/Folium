@@ -7,7 +7,6 @@
   import Notification from '$lib/components/Notification.svelte';
   import { setContext } from 'svelte';
   import { writable } from 'svelte/store';
-  import TestComponent from '../lib/TestComponent.svelte';
 
   // Create a writable store that tracks whether a connection error exists.
   const connectionError = writable(false);
@@ -68,7 +67,7 @@
     <!-- Display the connection error notification with a retry callback -->
     <Notification on:retry={retry} />
   {/if}
-  <TestComponent />
+
 
   <main class="site-main">
     <slot />

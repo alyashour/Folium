@@ -74,7 +74,7 @@ namespace {
 // Create a dedicated logger for DAL
 //----------------------------------------------------------------------
 
-static Logger::Logger dalLogger("DAL");
+static logger::Logger dalLogger("DAL");
 
 //----------------------------------------------------------------------
 // Database Configuration and Connection

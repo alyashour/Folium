@@ -1,242 +1,158 @@
-// dispatcher.cpp
-#include <iostream>
-#include <queue>
+#include "dispatcher.h"
+
+#include <mutex>
 #include <vector>
 #include <thread>
-#include <mutex>
+#include <atomic>
 #include <condition_variable>
-#include <stdexcept>
+#include <queue>
 
-#include "dispatcher.h"
+#include "util.h"
+#include "logger.h"
 #include "f_task.h"
-#include "core.h"
 #include "fifo_channel.h"
 
-namespace Dispatcher
+using namespace dispatcher;
+
+constexpr double MIN_SLEEP = 2, MAX_SLEEP = 3; // seconds
+
+F_Task processTask(F_Task &task)
 {
-
-    // --- Internal extended task structure ---
-    // Extends the base F_Task (from f_task.h) to include parameters for note operations.
-    struct ExtendedTask : public F_Task
-    {
-        int noteID;
-        int userID;
-        std::string noteData;
-
-
-    };
-
-    // --- Function to return a static priority for each task type ---
-    int getStaticPriority(Task_Type type)
-    {
-        // Arbitrary static priority values:
-        // Lower numbers mean higher priority.
-        switch (type)
-        {
-        case PING:
-            return 5;
-        case CREATE_NOTE:
-            return 1; // Also special, so handled separately.
-        case EDIT_NOTE:
-            return 2;
-        case SING_IN:
-            return 3;
-        case SING_UP:
-            return 3;
-        case LOG_OUT:
-            return 4;
-        default:
-            return 10;
-        }
-    }
-
-    // --- Wrapper to attach a priority to each task ---
+    logger::logS("Processing task: ", task.type_);
     
-
-    // Comparator so that tasks with lower numerical priority come first.
-    struct TaskComparator
-    {
-        bool operator()(const PrioritizedTask &a, const PrioritizedTask &b)
-        {
-            return a.priority > b.priority;
-        }
-    };
-
-    // --- Dispatcher Implementation ---
-
-    // Constructor now takes FIFO paths for requests and responses.
-    DispatcherImpl::DispatcherImpl(ipc::FifoChannel &reqFifo, ipc::FifoChannel &resFifo)
-        : requestFifo(reqFifo), responseFifo(resFifo),
-          stopFlag(false), specialTaskActive(false)
-    {
+    // Ensure PING tasks get proper responses
+    if (task.type_ == F_TaskType::PING) {
+        task.data_ = {{"status", "success"}, {"message", "pong from dispatch"}};
+        logger::log("Created PING response with data payload");
     }
-    DispatcherImpl::~DispatcherImpl() { stop(); }
-
-    // Create the thread pool. This function corresponds to the header declaration.
-    bool DispatcherImpl::createThreads(unsigned int numThreads)
-    {
-        if (numThreads == 0)
-        {
-            throw std::runtime_error("Number of threads must be greater than 0");
-        }
-        for (unsigned int i = 0; i < numThreads; ++i)
-        {
-            threads.emplace_back(&DispatcherImpl::workerThread, this);
-        }
-        return true;
-    }
-
     
+    logger::logS("Done processing task: ", task.type_);
+    return task;
+}
 
-    // Start the listener thread. The callback will be invoked for each IPC task received.
-    // The FIFO paths are already stored in the object.
-    void DispatcherImpl::startListener(const std::function<void(const F_Task &)> &callback)
+Dispatcher::Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsigned int numThreads)
+    : in_(in), out_(out), running_(true)
+{
+    // pong the gateway
+    F_Task task;
+    in_.read(task);
+
+    logger::log("Dispatch Pong!");
+    out_.send(F_Task(F_TaskType::PING));
+
+    createThreadPool(numThreads);
+}
+
+void Dispatcher::createThreadPool(const unsigned int numThreads)
+{
+    // reserve space in the vector
+    threadPool_.reserve(numThreads);
+
+    // create the worker threads
+    for (int i = 0; i < numThreads; i++)
     {
-        listenerThread = std::thread(&DispatcherImpl::listen, this, callback);
+        threadPool_.emplace_back(&Dispatcher::processInboundTasks, this, i);
     }
+}
 
-    // Add a task to the dispatcher.
-    void DispatcherImpl::addTask(const ExtendedTask &task)
+// Worker thread function to process tasks
+void Dispatcher::processInboundTasks(int threadId)
+{
+    logger::logS("Worker thread ", threadId, " started");
+    
+    while (running_)
     {
-        int priority = getStaticPriority(task.type);
-        if (task.type == CREATE_NOTE)
+        F_Task task;
+        bool hasTask = false;
+        
+        // Get a task from the queue
         {
-            {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                specialTaskActive = true; // Stall other tasks.
+            std::unique_lock<std::mutex> lock(taskMutex_);
+            
+            // Wait until there's a task or we're shutting down
+            taskCV_.wait(lock, [this]() { 
+                return !taskQueue_.empty() || !running_; 
+            });
+            
+            // If we're shutting down and there are no tasks, exit
+            if (!running_ && taskQueue_.empty())
+                break;
+                
+            if (!taskQueue_.empty()) {
+                task = taskQueue_.top();
+                taskQueue_.pop();
+                hasTask = true;
+                task.threadId_ = threadId;
+                logger::logS("Thread ", threadId, " picked up task of type: ", task.type_);
             }
-            // Process special task in its own temporary thread.
-            std::thread specialThread(&DispatcherImpl::processSpecialTask, this, task);
-            specialThread.join();
+        }
+        
+        // Process the task outside the lock
+        if (hasTask) {
+            F_Task response = processTask(task);
+            out_.send(response);
+            logger::logS("Thread ", threadId, " completed task");
+        }
+    }
+    
+    logger::logS("Worker thread ", threadId, " shutting down");
+}
+
+// Start the listening process
+void Dispatcher::start()
+{
+    // main loop to read from input
+    while (running_)
+    {
+        F_Task task;
+        in_.read(task);
+        
+        logger::log("Task received at dispatch!");
+
+        // if it's a syskill task
+        if (task.type_ == F_TaskType::SYSKILL)
+        {
+            logger::log("Dispatch recieved kill signal.");
+            // Signal threads to shut down
             {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                specialTaskActive = false;
+                std::unique_lock<std::mutex> lock(taskMutex_);
+                running_ = false;
+                taskCV_.notify_all();
             }
-            cv.notify_all();
+            break;
         }
-        else
+
+        // Add the task to the queue for worker threads
         {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            taskQueue.push(PrioritizedTask(task, priority));
-            cv.notify_one();
-        }
-    }
-
-    // Listener function that continuously reads IPC tasks.
-    void DispatcherImpl::listen(const std::function<void(const F_Task &)> &callback)
-    {
-        // Open FIFO channels (blocking mode, auto-create if needed is assumed)
-        ipc::Task ipcTask;
-        while (!stopFlag)
-        {
-            if (requestFifo.read(ipcTask))
-            {
-                std::cout << "[Dispatcher] Received IPC Task: ";
-                ipcTask.print();
-
-                // Invoke the callback to notify the application.
-                callback(ipcTask);
-
-                // Convert the ipc::Task to an ExtendedTask.
-                Task_Type type = static_cast<Task_Type>(ipcTask.id);
-                ExtendedTask extTask(type, ipcTask.id, 0, ipcTask.payload);
-                addTask(extTask);
-
-                ipcTask.completed = true;
-                responseFifo.send(ipcTask);
-            }
-        }
-    }
-
-    // New function: Start the listener on a separate thread.
-    void DispatcherImpl::start(const std::string &reqFifoPath, const std::string &resFifoPath)
-    {
-        std::thread listenerThread(&DispatcherImpl::listen, this, reqFifoPath, resFifoPath);
-        // Detach so that the listener runs in the background.
-        listenerThread.detach();
-    }
-
-    // Stop the dispatcher: signal stop, join worker threads and listener thread.
-    void DispatcherImpl::stop()
-    {
-        {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            stopFlag = true;
-        }
-        cv.notify_all();
-        for (auto &t : threads)
-        {
-            if (t.joinable())
-                t.join();
-        }
-        if (listenerThread.joinable())
-            listenerThread.join();
-    }
-
-    // Worker thread function: processes tasks from the queue.
-    void DispatcherImpl::workerThread()
-    {
-        while (true)
-        {
-            PrioritizedTask prioritizedTask(ExtendedTask(PING, 0, 0, ""), 0); // Default initialization.
-            {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                cv.wait(lock, [this]
-                        { return stopFlag || (!taskQueue.empty() && !specialTaskActive); });
-                if (stopFlag)
-                    break;
-                if (specialTaskActive)
-                    continue;
-                prioritizedTask = taskQueue.top();
-                taskQueue.pop();
-            }
-
-            // Process task based on type.
-            switch (prioritizedTask.task.type)
-            {
-            case PING:
-                std::cout << "[Worker] Processing PING task. Responding with PONG.\n";
-                break;
-            case EDIT_NOTE:
-                std::cout << "[Worker] Processing EDIT_NOTE task.\n";
-                Core::editBNote(prioritizedTask.task.noteID,
-                               prioritizedTask.task.userID,
-                               prioritizedTask.task.noteData);
-                break;
-            case SING_IN:
-                // Process sign-in...
-                break;
-            case SING_UP:
-                // Process sign-up...
-                break;
-            case LOG_OUT:
-                // Process log-out...
-                break;
-            default:
-                std::cout << "[Worker] Unknown task type received.\n";
-                break;
+            std::unique_lock<std::mutex> lock(taskMutex_);
+            
+            // Check if we're at max capacity
+            if (taskQueue_.size() >= threadPool_.size()) {
+                logger::log("WARN: Server too busy, dropping request...");
+                // Release lock before sending response
+                lock.unlock();
+                
+                // Return a message that the server is busy and the task was dropped
+                F_Task response(F_TaskType::ERROR);
+                response.data_ = {
+                    {"error", "Server busy! Request dropped, please try again later."}
+                };
+                out_.send(response);
+            } else {
+                // Add task to queue and notify a waiting thread
+                taskQueue_.push(task);
+                taskCV_.notify_one();
+                logger::log("Task added to queue");
             }
         }
     }
-
-    // Processes a special CREATE_NOTE task exclusively.
-    void DispatcherImpl::processSpecialTask(const ExtendedTask &task)
-    {
-        std::cout << "[Dispatcher] Processing special CREATE_NOTE task exclusively.\n";
-        Core::createBigNote(task.noteID, task.userID, task.noteData, "Default Title");
-        std::cout << "[Dispatcher] Special CREATE_NOTE task completed.\n";
+    
+    // Wait for all threads to finish
+    for (auto& thread : threadPool_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
     }
-
-    // --- Public interface as declared in the header file ---
-    bool DispatcherImpl::create_threads(unsigned int num_threads)
-    {
-        return this->createThreads(num_threads);
-    }
-
-    // New: Expose the start() function so that the dispatcher begins listening.
-    void DispatcherImpl::start_listening(const std::string &reqFifoPath, const std::string &resFifoPath)
-    {
-        this->start(reqFifoPath, resFifoPath);
-    }
-
+    
+    logger::log("Dispatcher shut down");
 }

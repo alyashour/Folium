@@ -6,7 +6,7 @@
 
 TEST(LoggerTest, LogMessage) {
     testing::internal::CaptureStdout();
-    Logger::log("Hello, World!");
+    logger::log("Hello, World!");
     std::string output = testing::internal::GetCapturedStdout();
 
     EXPECT_TRUE(output.starts_with("[LOG | ")) << "Log didn't begin with log.";

@@ -14,16 +14,22 @@
 #ifndef FOLSERV_HTTP_GATEWAY_H_
 #define FOLSERV_HTTP_GATEWAY_H_
 
-#include "httplib.h"
-
-#include "fifo_channel.h"
-
 #include <string>
 #include <thread>
 #include <atomic>
+#include <chrono>
+#include <nlohmann/json.hpp>
+
+#include "httplib.h"
+
+#include "logger.h"
+#include "f_task.h"
+#include "fifo_channel.h"
 
 namespace gateway
 {
+    
+
     class Gateway
     {
     private:
@@ -31,8 +37,21 @@ namespace gateway
         httplib::Server svr;
 
         ipc::FifoChannel in_, out_;
+
+        /**
+         * Initializes the gateway's routes.
+         */
+        void initializeRoutes(httplib::Server &svr);
+
+        /**
+         * Processes a single task and returns a response
+         */
+        F_Task processTaskAndWaitForResponse(const F_Task &task, int timeoutMs = 5000);
     public:
-        Gateway(ipc::FifoChannel in, ipc::FifoChannel out);
+        /**
+         * @brief Creates an http gateway connected with dispatch through pipes.
+         */
+        Gateway(ipc::FifoChannel& in, ipc::FifoChannel& out);
         ~Gateway();
 
         /**

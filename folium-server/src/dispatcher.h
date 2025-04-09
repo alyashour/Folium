@@ -21,108 +21,48 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include "f_task.h"       // Assumes that Task_Type and F_Task are defined.
-#include "fifo_channel.h" // Assumes ipc::FifoChannel and ipc::Task are defined.
-namespace Dispatcher
+
+#include "f_task.h"
+#include "fifo_channel.h"
+#include "core.h"
+
+namespace dispatcher
 {
 
-    // Forward declaration of the internal ExtendedTask used in testing.
-    // Its full definition is hidden in dispatcher.cpp.
-    struct ExtendedTask;
-
-    /**
-     * @brief Creates a thread pool with the specified number of threads.
-     * @param num_threads The number of threads to create in the thread pool.
-     * @return True if the thread pool was successfully created, false otherwise.
-     * @throws std::runtime_error if the thread pool cannot be created.
-     */
-
-
-struct PrioritizedTask
+    // --- Wrapper to attach a priority to each task ---
+    // Comparator so that tasks with lower numerical priority come first.
+    struct TaskComparator
     {
-        ExtendedTask* task;
-        int priority; // Lower value indicates higher priority.
-
-        PrioritizedTask(ExtendedTask* t, int p)
-            : task(t), priority(p) {}
-    };
-
-        // Exposed comparator.
-    struct TaskComparator {
-        bool operator()(const PrioritizedTask &a, const PrioritizedTask &b) {
-            return a.priority > b.priority; // Lower priority value comes first.
+        bool operator()(const F_Task& a, const F_Task& b)
+        {
+            return a.getPriority() > b.getPriority();
         }
     };
 
-    
-
-    class DispatcherImpl
+    class Dispatcher
     {
+    private:
+        std::vector<std::thread> threadPool_;
+        std::priority_queue<F_Task, std::vector<F_Task>, TaskComparator> taskQueue_;
+        std::mutex taskMutex_;
+        std::condition_variable taskCV_;
+        std::atomic<bool> running_ = false; // tells the threads to stop
+
+        std::mutex queueMutex_;
+        ipc::FifoChannel in_, out_;
+        
+        // initializes the thread pool
+        void createThreadPool(const unsigned int numThreads);
+
+        // the function that threads run
+        void processInboundTasks(int threadId);
     public:
         // Constructor now takes FIFO paths for requests and responses.
-        DispatcherImpl(ipc::FifoChannel &reqFifo, ipc::FifoChannel &resFifo);
-
-        ~DispatcherImpl();
-
-        // Create the thread pool. This function corresponds to the header declaration.
-        bool createThreads(unsigned int numThreads);
-
-        // Start the listener thread. The callback will be invoked for each IPC task received.
-        // The FIFO paths are already stored in the object.
-        void startListener(const std::function<void(const F_Task &)> &callback);
-
-        // Add a task to the dispatcher.
-        void addTask(const ExtendedTask &task);
-
-    private:
-        // Listener function that continuously reads IPC tasks.
-        void listen(const std::function<void(const F_Task &)> &callback);
+        Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsigned int numThreads);
 
         // New function: Start the listener on a separate thread.
-        void start(const std::string &reqFifoPath, const std::string &resFifoPath);
-
-        // Stop the dispatcher: signal stop, join worker threads and listener thread.
-        void stop();
-
-    private:
-        // Worker thread function: processes tasks from the queue.
-        void workerThread();
-
-        // Processes a special CREATE_NOTE task exclusively.
-        void processSpecialTask(const ExtendedTask &task);
-
-        bool create_threads(unsigned int num_threads);
-
-        void start_listening(const std::string &reqFifoPath, const std::string &resFifoPath);
-
-        // Internal members.
-        std::priority_queue<PrioritizedTask, std::vector<PrioritizedTask>, TaskComparator> taskQueue;
-        std::vector<std::thread> threads;
-        std::mutex queueMutex;
-        std::condition_variable cv;
-        bool stopFlag;
-        bool specialTaskActive;
-        ipc::FifoChannel requestFifo, responseFifo;
-        std::thread listenerThread;
+        void start();
     };
-
-    /**
-     * @brief Starts the dispatcher listener, which waits for incoming IPC tasks.
-     *
-     * The listener uses the provided FIFO paths for request and response and
-     * invokes the callback for each task received.
-     *
-     * @param reqFifoPath The path to the FIFO used for incoming requests.
-     * @param resFifoPath The path to the FIFO used for sending responses.
-     * @param callback A callback function to be invoked for each incoming IPC task.
-     */
-
-#ifdef DISPATCHER_TEST
-    // These additional functions are provided for testing purposes.
-    void addTaskForTesting(const ExtendedTask &task);
-    void stopDispatcher();
-#endif
-
-} // namespace Dispatcher
+}
 
 #endif // FOLSERV_DISPATCHER_H_

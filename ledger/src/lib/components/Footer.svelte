@@ -45,13 +45,15 @@
     });
 </script>
 
-<footer class="footer bg-dark text-white py-4">
+<footer class="footer bg-dark text-white py-2">
     <Container>
-        <p><i>Folium</i> © 2025</p>
-        <a href="https://github.com/alyashour/Ledger">Github</a>
-        <p>Using Ledger v{version}{dev ? "-dev" : ""}</p>
-        <p>
-            Made by Aly Ashour, Hamza Elkababji, Saad Elbayaty, and Omar Ramadan
+        <p class="mb-1" style="font-size: 0.4rem;"><i>Folium</i> © 2025</p>
+        <a href="https://github.com/alyashour/Ledger" style="font-size: 0.4rem;">Github</a>
+        <p class="mb-1" style="font-size: 0.4rem;">
+          Using Ledger v{version}{dev ? "-dev" : ""}
+        </p>
+        <p class="mb-0" style="font-size: 0.4rem;">
+          Made by Aly Ashour, Hamza Elkababji, Saad Al-Bayaty, and Omar Ramadan
         </p>
     </Container>
     <!-- Indicator Light -->
@@ -71,6 +73,7 @@
         position: relative; /* So the indicator positions relative to the footer */
         background-color: #333;
         color: white;
+        
     }
     .indicator {
         position: absolute;

@@ -69,12 +69,17 @@
   <Row class="mt-3">
     <!-- Left Column: Class Selector -->
     <Col md="2">
-      <div class="header-row d-flex align-items-center justify-content-between">
-        <h5 class="mb-0"><a href="/classes">My Classes</a></h5>
-        <Button color="secondary" size="sm" on:click={refreshClasses} title="Refresh">
-          🔄
+      <div class="header-row">
+        <!-- My Classes header button -->
+        <Button color="primary" size="lg" outline href="/classes" class="my-classes-header">
+          My Classes
+        </Button>
+        <!-- Refresh button placed below with a top margin -->
+        <Button color="secondary" size="sm" on:click={refreshClasses} title="Refresh" class="mt-2">
+          🔄 Refresh
         </Button>
       </div>
+      
   
       {#if classesLoading}
         <p>Loading...</p>
@@ -141,6 +146,7 @@
   </Row>
   
   <style>
+    
     /* Align header row items */
     .header-row {
       margin-bottom: 1rem;
@@ -168,5 +174,11 @@
     ul.list-unstyled li a:hover {
       background-color: #e2e6ea;
     }
+.my-classes-header {
+  font-weight: bold;
+  text-transform: uppercase;
+  padding: 0.75rem 1.5rem;
+  border-radius: 50px;
+}
   </style>
   

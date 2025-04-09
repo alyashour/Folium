@@ -10,7 +10,6 @@
 
 #include "logger.h"
 #include "auth.h"
-#include "jwt-cpp/jwt.h"
 
 using namespace gateway;
 using json = nlohmann::json;
@@ -52,7 +51,7 @@ void initializeRoutes(httplib::Server& svr)
         Logger::log("Gateway: GET /ping.");
 
         res.set_content(
-            "Hello World!\n",
+            "Pong!\n",
             "text/plain"
         ); 
     });
@@ -63,89 +62,18 @@ void initializeRoutes(httplib::Server& svr)
     svr.Post("/api/auth/register", [](const httplib::Request& req, httplib::Response& res) {
         Logger::log("Gateway: POST /api/auth/register");
 
-        try {
-            // get data
-            json json_data = nlohmann::json::parse(req.body);
-
-            // pull data from body
-            std::string username = json_data["username"];
-            std::string password = json_data["password"];
-
-            // perform the registration
-            const bool success = auth::registerUser(username, password);
-
-            // send response
-            json response;
-            if (success) {
-                res.status = 200;
-                response = {
-                    {"message", "Success!"},
-                    // TODO: update auth to return a user id instead of success
-                    {"userId", "NOT IMPLEMENTED YET!"}
-                };
-            } else {
-                res.status = 400;
-                response = {
-                    {"error", "Failed to register user. No additional information."}
-                };
-            }
-
-            res.set_content(response.dump(), "application/json");
-        } catch (const std::exception& e) {
-            res.status = 400;
-            const json response = {
-                {"error", e.what()}
-            };
-
-            res.set_content(response.dump(), "application/json");
-        }
+        
     });
 
     // log in
     svr.Post("/api/auth/login", [](const httplib::Request& req, httplib::Response& res) {
         Logger::log("Gateway: POST /api/auth/login");
-
-        try {
-            // get data
-            json json_data = nlohmann::json::parse(req.body);
-
-            // pull data from body
-            std::string username = json_data["username"];
-            std::string password = json_data["password"];
-
-            // perform the registration
-            // TODO: wait on hamza for jwt out of this function
-            // auth::login(username, password);
-            //...
-        } catch (const std::exception& e) {
-            //...
-        }
-
-        json response = {
-            {"error", "Not yet implemented."}
-        };
-
-        res.status = 501;
-        res.set_content(response.dump(), "application/json");
     });
 
     // log out
     svr.Post("/api/auth/logout", [](const httplib::Request& req, httplib::Response& res) {
         Logger::log("Gateway: POST /api/auth/logout");
 
-        try {
-            // get data
-            json json_data = nlohmann::json::parse(req.body);
-
-            res.set_content("", "application/json");
-        } catch (const std::exception& e) {
-            res.status = 400;
-            const json response = {
-                {"error", e.what()}
-            };
-
-            res.set_content(response.dump(), "application/json");
-        }
     });
 }
 

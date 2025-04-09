@@ -7,6 +7,7 @@
 #include "logger.h"
 #include "version.h"
 #include "fifo_util.h"
+#include "fifo_buffered.h"
 #include "dispatcher.h"
 #include "http_gateway.h"
 
@@ -32,30 +33,39 @@ int main(void)
         start dispatch on child process
     */
     pid_t pid = fork();
-    if (pid < 0)
-    {
+    if (pid < 0) {
         perror("Fork failed");
         return 1;
     }
 
-    if (pid == 0)
-    {
+    if (pid == 0) {
         // child
         Logger::logS("Dispatch process online with pid: ", pid);
 
-        Dispatcher::create_threads(10);
+        // create dispatcher
+        ipc::FifoChannel in(GW2DP, O_RDONLY);
+        ipc::FifoChannel out(DP2GW, O_WRONLY);
+        Dispatcher::dispatcher dispatcher(in, out);
 
+        // tell dispatcher to create threads
+        dispatcher.create_threads(10);
+
+        // start listening
+        dispatcher.start();
+
+        // after close
         Logger::log("Dispatch process done, closing...");
 
         return 0;
     }
-    else
-    {
+    else {
         // parent
         Logger::logS("Gateway process online with pid: ", pid);
 
         // create gateway
-        gateway::Gateway gateway;
+        ipc::FifoChannel in(DP2GW, O_RDONLY);
+        ipc::FifoChannel out(GW2DP, O_WRONLY);
+        gateway::Gateway gateway(in, out);
         gateway.listen(ip, port);
 
         // listen for input (to close)
@@ -67,6 +77,7 @@ int main(void)
             if (input == "exit")
             {
                 std::cout << "Exit command received. Shutting down..." << std::endl;
+                gateway.signal_shutdown();
                 gateway.stop();
                 break;
             }

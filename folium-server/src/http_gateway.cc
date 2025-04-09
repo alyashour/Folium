@@ -10,6 +10,7 @@
 
 #include "logger.h"
 #include "auth.h"
+#include "fifo_channel.h"
 
 using namespace gateway;
 using json = nlohmann::json;
@@ -62,7 +63,7 @@ void initializeRoutes(httplib::Server& svr)
     svr.Post("/api/auth/register", [](const httplib::Request& req, httplib::Response& res) {
         Logger::log("Gateway: POST /api/auth/register");
 
-        
+
     });
 
     // log in
@@ -77,7 +78,8 @@ void initializeRoutes(httplib::Server& svr)
     });
 }
 
-Gateway::Gateway()
+Gateway::Gateway(ipc::FifoChannel in, ipc::FifoChannel out)
+    :in_(in), out_(out)
 {
     initializeRoutes(svr);
 }

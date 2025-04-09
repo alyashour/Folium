@@ -194,7 +194,7 @@ void Gateway::initializeRoutes(httplib::Server &svr)
     Logger::log("Done instantiating routes.");
 }
 
-Gateway::Gateway(ipc::FifoChannel in, ipc::FifoChannel out)
+Gateway::Gateway(ipc::FifoChannel& in, ipc::FifoChannel& out)
     : in_(in), out_(out)
 {
     // should be debug

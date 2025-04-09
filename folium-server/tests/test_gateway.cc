@@ -26,8 +26,8 @@ TEST(GatewayTest, PingRouteRespondsWithHelloWorld) {
     ipc::FifoChannel in("testin", O_RDONLY);
     ipc::FifoChannel out("testout", O_WRONLY);
     gateway::Gateway gw(
-        ipc::FifoChannel("testin", O_RDONLY),
-        ipc::FifoChannel("testout", O_WRONLY)
+        in,
+        out
     );
     
     gw.listen("127.0.0.1", 50105);

@@ -55,12 +55,22 @@ namespace ipc
         bool send(const F_Task&task)
         {
             ssize_t n = ::write(fd_, &task, sizeof(F_Task));
+
             return n == sizeof(F_Task);
         }
 
         bool read(F_Task &task)
         {
             ssize_t n = ::read(fd_, &task, sizeof(F_Task));
+
+            if (n == 0) {
+                Logger::logErr("No writers attached, did process disconnect?");
+                throw std::runtime_error("No writers attached to pipe.");
+            } else if (n == -1) {
+                Logger::logErr("FIFO Read Error");
+                throw std::runtime_error("FIFO Read Error.");
+            }
+
             return n == sizeof(F_Task);
         }
         

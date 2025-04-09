@@ -28,19 +28,21 @@ Dispatcher::Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsign
     createThreadPool(numThreads);
 }
 
-void Dispatcher::createThreadPool(const unsigned int numThreads) {
+void Dispatcher::createThreadPool(const unsigned int numThreads)
+{
     // reserve space in the vector
     threadPool_.reserve(numThreads);
 
     // create the worker threads
-    for (int i = 0; i < numThreads; i++) {
+    for (int i = 0; i < numThreads; i++)
+    {
         threadPool_.emplace_back(&Dispatcher::processInboundTasks, this);
     }
 }
 
-
 // Start the listening process
-void Dispatcher::start() {
+void Dispatcher::start()
+{
     std::vector<bool> threadBusy(threadPool_.size(), false);
     std::vector<F_Task> currentTasks(threadPool_.size());
     std::mutex taskMutex;
@@ -48,97 +50,114 @@ void Dispatcher::start() {
     running_ = true;
 
     // main loop to read from input
-    while (running_) {
+    while (running_)
+    {
         F_Task task;
+        in_.read(task);
+        
+        // got a task! 
+        // should be debug
+        Logger::log("Task recieved at dispatch!");
 
-        if (in_.read(task)) {
-            // got a task!
-            Logger::log("Task recieved at dispatch");
+        // if its a syskill task
+        if (task.type_ == F_TaskType::SYSKILL)
+        {
+            running_ = false;
+            break;
+        }
 
-            // if its a syskill task
-            if (task.type_ == F_TaskType::SYSKILL) {
-                running_ = false;
+        // assign it to an idle thread
+        std::unique_lock<std::mutex> lock(taskMutex);
+
+        // check for idle thread
+        int idleThreadId = -1;
+        for (int i = 0; i < threadBusy.size(); i++)
+        {
+            if (!threadBusy[i])
+            {
+                idleThreadId = i;
                 break;
             }
+        }
 
-            // assign it to an idle thread
-            std::unique_lock<std::mutex> lock(taskMutex);
+        if (idleThreadId != -1)
+        {
+            // assign task to idle thread
+            threadBusy[idleThreadId] = true;
+            currentTasks[idleThreadId] = task;
 
-            // check for idle thread
-            int idleThreadId = -1;
-            for (int i = 0; i < threadBusy.size(); i++) {
-                if (!threadBusy[i]) {
-                    idleThreadId = i;
-                    break;
+            // signal thread to process task
+            taskCV.notify_one();
+        }
+        else
+        {
+            // no idle thread found
+            // add to queue based on priority
+            {
+                std::lock_guard<std::mutex> queueLock(queueMutex_);
+                taskQueue_.push(task);
+            }
+
+            // check for preemption
+            int lowestPriorityThreadId = -1;
+            int lowestPriority = -1;
+
+            for (int i = 0; i < threadBusy.size(); i++)
+            {
+                if (threadBusy[i])
+                {
+                    int currentPriority = currentTasks[i].getPriority();
+                    if (lowestPriorityThreadId == -1 || currentPriority > lowestPriority)
+                    {
+                        lowestPriority = currentPriority;
+                        lowestPriorityThreadId = i;
+                    }
                 }
             }
 
-            if (idleThreadId != -1) {
-                // assign task to idle thread
-                threadBusy[idleThreadId] = true;
-                currentTasks[idleThreadId] = task;
-
-                // signal thread to process task
-                taskCV.notify_one();
-            } else {
-                // no idle thread found
-                // add to queue based on priority
-                {
-                    std::lock_guard<std::mutex> queueLock(queueMutex_);
-                    taskQueue_.push(task);
-                }
-
-                // check for preemption
-                int lowestPriorityThreadId = -1;
-                int lowestPriority = -1;
-
-                for (int i = 0; i < threadBusy.size(); i++) {
-                    if (threadBusy[i]) {
-                        int currentPriority = currentTasks[i].getPriority();
-                        if (lowestPriorityThreadId == -1 || currentPriority > lowestPriority) {
-                            lowestPriority = currentPriority;
-                            lowestPriorityThreadId = i;
-                        }
-                    }
-                }
-
-                if (lowestPriorityThreadId != -1 &&
-                    task.getPriority() < lowestPriority) {
-                        // signal the threads
-                }
+            if (lowestPriorityThreadId != -1 &&
+                task.getPriority() < lowestPriority)
+            {
+                // signal the threads
             }
         }
     }
 }
 
-F_Task processTask(F_Task& task) {
+F_Task processTask(F_Task &task)
+{
     Logger::logS("Processing task: ", task.type_);
     Logger::logS("Done processing task: ", task.type_);
 
     return task;
 }
 
-
-void Dispatcher::processInboundTasks() {
-    while (running_) {
+void Dispatcher::processInboundTasks()
+{
+    while (running_)
+    {
         F_Task task;
         bool hasTask = false;
 
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
-            if (!taskQueue_.empty()) {
+            if (!taskQueue_.empty())
+            {
                 task = taskQueue_.top();
                 taskQueue_.pop();
                 hasTask = true;
             }
         }
 
-        if (hasTask) {
+        if (hasTask)
+        {
             // process the task
             F_Task result = processTask(task);
 
             out_.send(result);
-        } else {
+        }
+        else
+        {
             // no task is available, sleep to avoid busy waiting
             util::randomSleep(MIN_SLEEP, MAX_SLEEP);
         }

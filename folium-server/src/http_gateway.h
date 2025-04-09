@@ -51,7 +51,7 @@ namespace gateway
         /**
          * @brief Creates an http gateway connected with dispatch through pipes.
          */
-        Gateway(ipc::FifoChannel in, ipc::FifoChannel out);
+        Gateway(ipc::FifoChannel& in, ipc::FifoChannel& out);
         ~Gateway();
 
         /**

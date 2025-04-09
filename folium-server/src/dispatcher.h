@@ -22,6 +22,8 @@ namespace Dispatcher {
      * @throws std::runtime_error if the thread pool cannot be created.
      */
     bool create_threads(unsigned int num_threads);
+
+    class DispatcherImpl{};
 }
 
 #endif // FOLSERV_DISPATCHER_H_

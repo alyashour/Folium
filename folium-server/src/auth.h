@@ -11,7 +11,10 @@
 #include <iostream>
 #include <string>
 
-namespace Auth{
+namespace auth {
+    const unsigned int MIN_USERNAME_LENGTH = 3;
+    const unsigned int MIN_PASSWORD_LENGTH = 5;
+
     // might not need this 
     enum Role {
         ADMIN,

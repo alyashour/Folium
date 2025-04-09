@@ -6,7 +6,7 @@
 // A simple User structure to store the hashed password and role.
 struct User {
     std::string password;  // In production, store securely hashed password.
-    Auth::Role role;
+    auth::Role role;
 };
 
 // In-memory store for users.
@@ -16,12 +16,12 @@ static std::unordered_map<std::string, User> users;
 static void initDefaultUser() {
     if (users.find("admin") == users.end()) {
         // For the prototype, the default admin password is "password".
-        users["admin"] = { Auth::hashPassword("password"), Auth::ADMIN };
+        users["admin"] = { auth::hashPassword("password"), auth::ADMIN };
         std::cout << "Default admin user seeded." << std::endl;
     }
 }
 
-namespace Auth {
+namespace auth {
 
     // Checks the credentials for the given user.
     bool check_credentials(const std::string& username, const std::string& password) {
@@ -50,7 +50,7 @@ namespace Auth {
             std::cerr << "User " << username << " already exists." << std::endl;
             return false;
         }
-        users[username] = { hashPassword(password), Auth::USER };
+        users[username] = { hashPassword(password), auth::USER };
         std::cout << "User " << username << " registered successfully." << std::endl;
         return true;
     }
@@ -126,7 +126,7 @@ namespace Auth {
         return true;
     }
 
-} // namespace Auth
+} // namespace auth
 
 // Static initializer to seed the default admin user upon module load.
 struct AuthInitializer {

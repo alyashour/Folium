@@ -89,7 +89,6 @@ add_library(folium-core
     src/http_gateway.cc
     src/logger.cc
     src/pipe-filter.cc
-    src/api_routes.cc 
 )
 
 # Set include directories for the library

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <poll.h>  // Add this for polling
 
+#include "logger.h"
 #include "f_task.h"
 
 namespace ipc
@@ -21,10 +22,13 @@ namespace ipc
         FifoChannel(const std::string &path, int flags, bool create = true)
             : path_(path), fd_(-1)
         {
+            // should be debug
+            Logger::log("Creating FIFO Channel" + path);
             if (create)
             {
                 if (mkfifo(path.c_str(), 0666) == -1 && errno != EEXIST)
                 {
+                    Logger::logErr("mkfifo failed: " + path);
                     throw std::runtime_error("mkfifo failed: " + path);
                 }
             }
@@ -32,8 +36,12 @@ namespace ipc
             fd_ = open(path.c_str(), flags);
             if (fd_ == -1)
             {
+                Logger::logErr("open failed: " + path);
                 throw std::runtime_error("Failed to open FIFO: " + path);
             }
+
+            // debug
+            Logger::log("Done creating FIFO Channel" + path);
         }
 
         ~FifoChannel()

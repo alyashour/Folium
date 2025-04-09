@@ -36,7 +36,7 @@ void Logger::log(std::string s) {
    std::cout << getHeader("LOG") << s << std::endl;
 }
 
-void Logger::logErr(std::string s) {
+void Logger::logErr(std::string s, bool do_log_trace) {
    // add a period if it doesn't end with one
    if (!s.ends_with('.') && !s.ends_with('!')) {
       s += ".";

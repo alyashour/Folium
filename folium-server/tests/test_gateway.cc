@@ -23,7 +23,13 @@ bool wait_until_port_open(const std::string& host, int port, int timeout_ms = 20
 }
 
 TEST(GatewayTest, PingRouteRespondsWithHelloWorld) {
-    gateway::Gateway gw;
+    ipc::FifoChannel in("testin", O_RDONLY);
+    ipc::FifoChannel out("testout", O_WRONLY);
+    gateway::Gateway gw(
+        ipc::FifoChannel("testin", O_RDONLY),
+        ipc::FifoChannel("testout", O_WRONLY)
+    );
+    
     gw.listen("127.0.0.1", 50105);
 
     ASSERT_TRUE(wait_until_port_open("127.0.0.1", 50105)) << "Server did not become ready in time";

@@ -1,5 +1,8 @@
+/**
+ * NOT THREAD SAFE.
+ * There can only be 1 gateway running at a time in a single process.
+ */
 #include "http_gateway.h"
-#include "api_routes.h"
 
 #include <string>
 #include <thread>
@@ -50,6 +53,8 @@ std::string extractJWT(const httplib::Request &req)
  */
 void Gateway::initializeRoutes(httplib::Server &svr)
 {
+    Logger::log("Instantiating Routes...");
+
     /* GET ROUTES */
 
     // ping
@@ -61,6 +66,31 @@ void Gateway::initializeRoutes(httplib::Server &svr)
             "Pong!\n",
             "text/plain"
         ); 
+    });
+
+    // ping-core
+    svr.Get("/ping-core", [this](const httplib::Request &, httplib::Response &res)
+    { 
+        Logger::log("Gateway: GET /ping-core.");
+
+        // create task
+        F_Task task;
+        task.type_ = F_TaskType::PING;
+
+        F_Task outputTask = processTaskAndWaitForResponse(task);
+
+        if (outputTask.type_ == F_TaskType::ERROR) {
+            res.status = 400;
+        } else {
+            res.status = 200;
+        }
+
+        // TEMP
+        json response = {
+            {"message", "pong!"}
+        };
+
+        res.set_content(response.dump(), "application/json");
     });
 
     /* POST ROUTES */
@@ -77,29 +107,29 @@ void Gateway::initializeRoutes(httplib::Server &svr)
 
             // create task
             F_Task task;
-            task.type = F_TaskType::REGISTER;
-            task.data = {
+            task.type_ = F_TaskType::REGISTER;
+            task.data_ = {
                 {"username", username},
                 {"password", password}
             };
 
             F_Task outputTask = processTaskAndWaitForResponse(task);
 
-            if (outputTask.type == F_TaskType::ERROR) {
+            if (outputTask.type_ == F_TaskType::ERROR) {
                 res.status = 400;
             } else {
                 res.status = 200;
             }
             
             // check presence of necessary outputs
-            if (!outputTask.data.contains("message") || !outputTask.data.contains("userId")) {
+            if (!outputTask.data_.contains("message") || !outputTask.data_.contains("userId")) {
                 Logger::logErr("FATAL! WRONG FORMAT. MAKE SURE REGISTER TASK OUTPUTS CORRECT VALUES!");
                 throw std::runtime_error("Fatal");
             }
 
             json response = {
-                {"message", outputTask.data["message"]},
-                {"userId", outputTask.data["userId"]}
+                {"message", outputTask.data_["message"]},
+                {"userId", outputTask.data_["userId"]}
             };
 
             res.set_content(response.dump(), "application/json");
@@ -128,21 +158,22 @@ void Gateway::initializeRoutes(httplib::Server &svr)
 
             // create task
             F_Task task;
-            task.type = F_TaskType::REGISTER;
-            task.data = {
+            task.type_ = F_TaskType::REGISTER;
+            task.data_ = {
                 {"username", username},
                 {"password", password}
             };
 
+            // TEMP should have 2 threads instead
             F_Task response = processTaskAndWaitForResponse(task);
 
-            if (response.type == F_TaskType::ERROR) {
+            if (response.type_ == F_TaskType::ERROR) {
                 res.status = 400;
             } else {
                 res.status = 200;
             }
 
-            res.set_content(response.data.dump(), "application/json");
+            res.set_content(response.data_.dump(), "application/json");
             
         } catch (const std::exception& e) {
             res.status = 400;
@@ -159,11 +190,28 @@ void Gateway::initializeRoutes(httplib::Server &svr)
     // log out
     svr.Post("/api/auth/logout", [](const httplib::Request &req, httplib::Response &res)
              { Logger::log("Gateway: POST /api/auth/logout"); });
+
+    Logger::log("Done instantiating routes.");
 }
 
 Gateway::Gateway(ipc::FifoChannel in, ipc::FifoChannel out)
     : in_(in), out_(out)
 {
+    // should be debug
+    Logger::log("Gateway constructor called.");
+
+    // try to ping the dispatch to make sure connection is made
+    Logger::log("Gateway Ping!");
+    out_.send(F_Task(F_TaskType::PING));
+
+    F_Task task;
+    bool success = in_.read(task);
+
+    if (!success) {
+        throw std::runtime_error("Couldn't connect to dispatch");
+    }
+    Logger::log("Gateway-Dispatch handshake complete!");
+
     initializeRoutes(svr);
 }
 
@@ -202,7 +250,7 @@ void Gateway::stop()
  * @param task
  * @param timeoutMs
  */
-F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs = 5000)
+F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
 {
     // Send task to out channel
     bool sent = out_.send(task);
@@ -210,8 +258,8 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs 
     {
         Logger::log("Gateway: Failed to send task to processing service");
         F_Task errorTask;
-        errorTask.type = F_TaskType::ERROR;
-        errorTask.data = {{"status", "error"}, {"message", "IPC communication failure"}};
+        errorTask.type_ = F_TaskType::ERROR;
+        errorTask.data_ = {{"status", "error"}, {"message", "IPC communication failure"}};
         return errorTask;
     }
 
@@ -225,8 +273,8 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs 
         {
             Logger::log("Gateway: Response timeout");
             F_Task timeoutTask;
-            timeoutTask.type = F_TaskType::ERROR;
-            timeoutTask.data = {{"status", "error"}, {"message", "Response timeout"}};
+            timeoutTask.type_ = F_TaskType::ERROR;
+            timeoutTask.data_ = {{"status", "error"}, {"message", "Response timeout"}};
             return timeoutTask;
         }
 
@@ -240,14 +288,18 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs 
             {
                 Logger::log("Gateway: Failed to read response");
                 F_Task readErrorTask;
-                readErrorTask.type = F_TaskType::ERROR;
-                readErrorTask.data = {{"status", "error"}, {"message", "Failed to read response"}};
+                readErrorTask.type_ = F_TaskType::ERROR;
+                readErrorTask.data_ = {{"status", "error"}, {"message", "Failed to read response"}};
                 return readErrorTask;
             }
             return response; // Return the complete F_Task
         }
 
         // Short sleep to prevent CPU hogging
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+}
+
+void Gateway::signal_shutdown() {
+    out_.send(F_Task(F_TaskType::SYSKILL));
 }

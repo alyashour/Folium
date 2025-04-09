@@ -48,6 +48,9 @@ namespace gateway
          */
         F_Task processTaskAndWaitForResponse(const F_Task &task, int timeoutMs = 5000);
     public:
+        /**
+         * @brief Creates an http gateway connected with dispatch through pipes.
+         */
         Gateway(ipc::FifoChannel in, ipc::FifoChannel out);
         ~Gateway();
 

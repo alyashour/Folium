@@ -18,8 +18,8 @@ enum F_TaskType {
     CREATE_NOTE,
     REGISTER,
     EDIT_NOTE,
-    SING_IN,
-    SING_UP,
+    SIGN_IN,
+    SIGN_UP,
     LOG_OUT,
     ERROR,
     SYSKILL
@@ -29,13 +29,35 @@ enum F_TaskType {
  * @brief Struct for tasks in the server.
  */
 struct F_Task {
-    unsigned int thread_id;
-    unsigned int progress;
-    bool is_done;
-
-    json data;
     
-    F_TaskType type;
+    unsigned int threadId_;
+    unsigned int progress_;
+    bool isDone_;
+
+    json data_;
+    
+    F_TaskType type_;
+
+    /**
+     * @brief Creates an empty task.
+     * @deprecated Use F_Task(F_TaskType type) instead.
+     */
+    F_Task() {}
+
+    F_Task(F_TaskType type)
+        : type_(type)
+    {}
+
+    // TODO: IMPROVE THIS SYSTEM
+    int getPriority() const {
+        if (type_ == F_TaskType::PING || type_ == F_TaskType::SYSKILL) {
+            return 1;
+        } else if (type_ == F_TaskType::SIGN_IN) {
+            return 2;
+        } else {
+            return 10;
+        }
+    }
 };
 
 #endif // FOLSERV_TASK_H_

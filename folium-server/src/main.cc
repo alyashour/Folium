@@ -10,9 +10,9 @@
 #include "dispatcher.h"
 #include "http_gateway.h"
 
-std::string ip = "127.0.0.1";
-int port = 50105;
-unsigned int num_threads = 10;
+const std::string ip = "127.0.0.1";
+const int port = 50105;
+const unsigned int num_threads = 10;
 
 const std::string GW2DP = "GW2DP";
 const std::string DP2GW = "DP2GW";
@@ -44,10 +44,7 @@ int main(void)
         // create dispatcher
         ipc::FifoChannel in(GW2DP, O_RDONLY);
         ipc::FifoChannel out(DP2GW, O_WRONLY);
-        Dispatcher::DispatcherImpl dispatcher(in, out);
-
-        // tell dispatcher to create threads
-        dispatcher.create_threads(10);
+        dispatcher::Dispatcher dispatcher(in, out, num_threads);
 
         // start listening
         dispatcher.start();
@@ -57,13 +54,13 @@ int main(void)
 
         return 0;
     }
+    // parent
     else {
-        // parent
         Logger::logS("Gateway process online with pid: ", pid);
 
         // create gateway
-        ipc::FifoChannel in(DP2GW, O_RDONLY);
         ipc::FifoChannel out(GW2DP, O_WRONLY);
+        ipc::FifoChannel in(DP2GW, O_RDONLY);
         gateway::Gateway gateway(in, out);
         gateway.listen(ip, port);
 

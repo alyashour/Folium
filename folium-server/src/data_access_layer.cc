@@ -37,6 +37,7 @@
 #include <optional>
 #include <unordered_map>
 #include <memory>
+#include <iostream> // Add this line for std::cerr
 
 //----------------------------------------------------------------------
 // Global per-file mutex management
@@ -572,7 +573,7 @@ namespace DAL {
  * @return True if the query was executed successfully, false otherwise
  */
 bool execute_query(const std::string& query) {
-    MYSQL* conn = create_connection();
+    MYSQL* conn = createConnection();
     if (!conn) return false;
 
     bool success = (mysql_query(conn, query.c_str()) == 0);
@@ -589,7 +590,7 @@ bool execute_query(const std::string& query) {
  * @return The escaped string
  */
 std::string escape_string(const std::string& input) {
-    MYSQL* conn = create_connection();
+    MYSQL* conn = createConnection();
     if (!conn) {
         std::cerr << "[ERROR] Failed to connect to database for string escaping." << std::endl;
         // Basic fallback escaping for single quotes
@@ -616,7 +617,7 @@ std::string escape_string(const std::string& input) {
  * @return The result string, or empty if no results
  */
 std::string get_single_result(const std::string& query) {
-    MYSQL* conn = create_connection();
+    MYSQL* conn = createConnection();
     if (!conn) {
         std::cerr << "[ERROR] Failed to connect to database for query." << std::endl;
         return "";
@@ -647,7 +648,7 @@ std::string get_single_result(const std::string& query) {
  * @return True if the query returns a non-zero result, false otherwise
  */
 bool query_returns_results(const std::string& query) {
-    MYSQL* conn = create_connection();
+    MYSQL* conn = createConnection();
     if (!conn) return false;
 
     if (mysql_query(conn, query.c_str())) {

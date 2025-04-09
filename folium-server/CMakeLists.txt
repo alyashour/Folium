@@ -112,7 +112,7 @@ endif()
 # Find MySQL C client library
 find_library(MYSQLCLIENT_LIB 
     NAMES mysqlclient
-    PATHS /opt/homebrew/lib /usr/local/lib
+    PATHS /opt/homebrew/Cellar/mysql-client/9.2.0/lib /opt/homebrew/lib /usr/local/lib
 )
 if(NOT MYSQLCLIENT_LIB)
     message(FATAL_ERROR "MySQL C client library (libmysqlclient) not found")

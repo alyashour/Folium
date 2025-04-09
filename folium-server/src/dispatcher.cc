@@ -9,6 +9,7 @@
 #include "dispatcher.h"
 #include "f_task.h"
 #include "core.h"
+#include "fifo_channel.h"
 
 namespace Dispatcher {
 
@@ -109,24 +110,24 @@ public:
         ipc::FifoChannel requestChannel(reqFifoPath, O_RDONLY, true);
         ipc::FifoChannel responseChannel(resFifoPath, O_WRONLY, true);
         
-        ipc::Task ipcTask;
-        while (true) {
-            // Block until a task is received via the FIFO.
-            if (requestChannel.read(ipcTask)) {
-                std::cout << "[Dispatcher] Received IPC Task: ";
-                ipcTask.print();
-                // Convert ipc::Task to ExtendedTask.
-                // (In a real system, you’d parse payload to determine type and parameters.)
-                // Here we use task.id as an example to pick a type:
-                Task_Type type = static_cast<Task_Type>(ipcTask.id);
-                ExtendedTask extTask(type, ipcTask.id, 0, ipcTask.payload);
-                // Dispatch the task using our addTask function.
-                addTask(extTask);
-                // After processing, mark the IPC task as completed and send it back.
-                ipcTask.completed = true;
-                responseChannel.send(ipcTask);
-            }
-        }
+        // ipc::Task ipcTask;
+        // while (true) {
+        //     // Block until a task is received via the FIFO.
+        //     if (requestChannel.read(ipcTask)) {
+        //         std::cout << "[Dispatcher] Received IPC Task: ";
+        //         ipcTask.print();
+        //         // Convert ipc::Task to ExtendedTask.
+        //         // (In a real system, you’d parse payload to determine type and parameters.)
+        //         // Here we use task.id as an example to pick a type:
+        //         Task_Type type = static_cast<Task_Type>(ipcTask.id);
+        //         ExtendedTask extTask(type, ipcTask.id, 0, ipcTask.payload);
+        //         // Dispatch the task using our addTask function.
+        //         addTask(extTask);
+        //         // After processing, mark the IPC task as completed and send it back.
+        //         ipcTask.completed = true;
+        //         responseChannel.send(ipcTask);
+        //     }
+        // }
     }
 
         // New function: Start the listener on a separate thread.
@@ -172,7 +173,7 @@ private:
                     break;
                 case EDIT_NOTE:
                     std::cout << "[Worker] Processing EDIT_NOTE task.\n";
-                    Core::editNote(prioritizedTask.task.noteID,
+                    Core::editBigNote(prioritizedTask.task.noteID,
                                    prioritizedTask.task.userID,
                                    prioritizedTask.task.noteData);
                     break;
@@ -195,7 +196,7 @@ private:
     // Processes a special CREATE_NOTE task exclusively.
     void processSpecialTask(const ExtendedTask& task) {
         std::cout << "[Dispatcher] Processing special CREATE_NOTE task exclusively.\n";
-        Core::createNote(task.noteID, task.userID, task.noteData);
+        Core::createBigNote(task.noteID, task.userID, task.noteData, "Default Title");
         std::cout << "[Dispatcher] Special CREATE_NOTE task completed.\n";
     }
 

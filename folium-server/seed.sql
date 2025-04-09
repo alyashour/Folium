@@ -62,30 +62,18 @@ INSERT INTO classes (user_id, name, description, instructor) VALUES
 (5, 'Algorithms', 'Collaborative space for algorithm design and analysis.', 'Professor Davis');
 
 -- Enroll users into classes (sample enrollments)
--- Enroll all users into Operating Systems (class_id = 1)
 INSERT INTO user_classes (user_id, class_id) VALUES 
-(1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1);
-
--- Enroll a subset into Database Systems (class_id = 2)
-INSERT INTO user_classes (user_id, class_id) VALUES 
-(1, 2), (3, 2), (5, 2), (7, 2);
-
--- Enroll a subset into Data Structures (class_id = 3)
-INSERT INTO user_classes (user_id, class_id) VALUES 
-(2, 3), (4, 3), (6, 3), (8, 3);
-
--- Enroll a subset into Computer Networks (class_id = 4)
-INSERT INTO user_classes (user_id, class_id) VALUES 
-(1, 4), (2, 4), (4, 4), (5, 4), (7, 4);
-
--- Enroll a subset into Algorithms (class_id = 5)
-INSERT INTO user_classes (user_id, class_id) VALUES 
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5),  -- Ensure test user is enrolled in all classes
+(2, 1), (3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1),
+(3, 2), (5, 2), (7, 2),
+(2, 3), (4, 3), (6, 3), (8, 3),
+(1, 4), (2, 4), (4, 4), (5, 4), (7, 4),
 (3, 5), (4, 5), (6, 5), (8, 5);
 
--- Insert shared notes for each class. Note file paths could follow a consistent folder structure.
+-- Insert shared notes for each class
 INSERT INTO notes (class_id, title, file_path) VALUES 
-(1, 'Operating Systems Shared Note', '/notes/operating_systems/os_shared_note.txt'),
-(2, 'Database Systems Shared Note', '/notes/database_systems/db_shared_note.txt'),
-(3, 'Data Structures Shared Note', '/notes/data_structures/ds_shared_note.txt'),
-(4, 'Computer Networks Shared Note', '/notes/computer_networks/cn_shared_note.txt'),
-(5, 'Algorithms Shared Note', '/notes/algorithms/alg_shared_note.txt');
+(1, 'Operating Systems Shared Note', 'notes/class_1_note.txt'),
+(2, 'Database Systems Shared Note', 'notes/class_2_note.txt'),
+(3, 'Data Structures Shared Note', 'notes/class_3_note.txt'),
+(4, 'Computer Networks Shared Note', 'notes/class_4_note.txt'),
+(5, 'Algorithms Shared Note', 'notes/class_5_note.txt');

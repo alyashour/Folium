@@ -27,7 +27,7 @@
       * @param userId The ID of the requesting user (for access verification)
       * @return A string containing the note content (could be JSON formatted)
       */
-     std::string getBigNote(int classId, int userId);
+    nlohmann::json getBigNote(int classId, int userId);
      
      /**
       * @brief Uploads and integrates a new note into a class's big note

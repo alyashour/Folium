@@ -3,12 +3,16 @@
 #include <stdexcept>
 #include <sstream>
 #include <fstream> 
+#include <nlohmann/json.hpp>
 #include <filesystem>  // For directory creation (C++17)
+
+using json = nlohmann::json;
 
 namespace Core {
 
 // Retrieve the big note for a specific class
-std::string getBigNote(int classId, int userId) {
+//return json instead of string
+nlohmann::json getBigNote(int classId, int userId) {
     try {
         // Verify user access
         std::string accessQuery = "SELECT 1 FROM user_classes WHERE class_id = " + std::to_string(classId) +
@@ -30,12 +34,12 @@ std::string getBigNote(int classId, int userId) {
         }
 
         // Read the file content
-        std::string noteContent = DAL::readTxtFile(filePath); // Use readTxtFile
-        if (noteContent.empty()) {
+        json noteJson = DAL::readJsonFile(filePath);
+        if (noteJson.is_null() || noteJson.empty()) {
             throw std::runtime_error("Note content is empty or file could not be read at path: " + filePath);
         }
 
-        return noteContent;
+        return noteJson;
     } catch (const std::exception& e) {
         throw std::runtime_error("Failed to retrieve big note: " + std::string(e.what()));
     }
@@ -74,6 +78,7 @@ bool createBigNote(int classId, int userId, const std::string& content, const st
 }
 
 // Upload and integrate a new note
+// const string note
 bool uploadNote(int classId, int userId, const std::string& filePath, const std::string& title) {
     try {
         // Verify user access
@@ -82,29 +87,51 @@ bool uploadNote(int classId, int userId, const std::string& filePath, const std:
             throw std::runtime_error("User is not enrolled in this class.");
         }
 
-        // Read the uploaded file content
-        std::string uploadedContent = DAL::readTxtFile(filePath); // Use readTxtFile
-        if (uploadedContent.empty()) {
+        // Read the uploaded file content as JSON.
+        json uploadedJson = DAL::readJsonFile(filePath);
+        if (uploadedJson.is_null() || uploadedJson.empty()) {
             throw std::runtime_error("Uploaded file is empty or could not be read.");
         }
 
-        // Check if a note already exists
-        std::string existingFilePath = DAL::get_single_result("SELECT file_path FROM notes WHERE class_id = " + std::to_string(classId) + ";");
+        // Check if a note already exists.
+        std::string existingFilePath = DAL::get_single_result("SELECT file_path FROM notes WHERE class_id = " 
+                                    + std::to_string(classId) + ";");
         if (existingFilePath.empty()) {
-            // Create a new note if none exists
-            return createBigNote(classId, userId, uploadedContent, title.empty() ? "Uploaded Note" : title);
+            // Create a new note if none exists. Dump the uploaded JSON to a string.
+            return createBigNote(classId, userId, uploadedJson.dump(), title.empty() ? "Uploaded Note" : title);
         }
 
-        // Append the uploaded content to the existing note
-        std::string existingContent = DAL::readTxtFile(existingFilePath); // Use readTxtFile
-        std::string integratedContent = existingContent + "\n\n--- New Upload ---\n\n" + uploadedContent;
 
-        if (!DAL::writeFile(existingFilePath, integratedContent)) { // Use writeFile
+          // Read the existing note content as JSON.
+        json existingJson = DAL::readJsonFile(existingFilePath);
+        if (existingJson.is_null()) {
+            throw std::runtime_error("Existing note content could not be read.");
+        }
+
+        // Ensure "units" exists as an array in the existing JSON.
+        if (!existingJson.contains("units") || !existingJson["units"].is_array()) {
+            existingJson["units"] = json::array();
+        }
+
+        // Create a new unit containing the uploaded content.
+        json newUnit = {
+            {"unitId", "unit_new"}, // Consider generating a unique unit ID.
+            {"title", title.empty() ? "Uploaded Note" : title},
+            {"content", uploadedJson.dump()}
+        };
+
+
+        // Append the new unit to the "units" array.
+        existingJson["units"].push_back(newUnit);
+
+        // Write the updated JSON back to the file.
+        if (!DAL::writeFile(existingFilePath, existingJson.dump())) {
             throw std::runtime_error("Failed to write integrated content to file.");
         }
 
-        // Update the database timestamp
-        if (!DAL::execute_query("UPDATE notes SET updated_at = NOW() WHERE class_id = " + std::to_string(classId) + ";")) {
+        // Update the database timestamp.
+        std::string query = "UPDATE notes SET updated_at = NOW() WHERE class_id = " + std::to_string(classId) + ";";
+        if (!DAL::execute_query(query)) {
             throw std::runtime_error("Failed to update note timestamp in database.");
         }
 

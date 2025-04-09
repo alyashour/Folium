@@ -349,6 +349,55 @@ void write_json_file(const nlohmann::json& data) {
     out << data.dump(4);
 }
 
+/**
+ * @brief Execute an SQL query on the database
+ * @param query The SQL query to execute
+ * @return True if the query was executed successfully, false otherwise
+ */
+bool execute_query(const std::string& query) {
+    MYSQL* conn = create_connection();
+    if (!conn) return false;
+
+    bool success = (mysql_query(conn, query.c_str()) == 0);
+    if (!success) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+    }
+    
+    mysql_close(conn);
+    return success;
+}
+
+/**
+ * @brief Check if a query returns any results
+ * @param query The SQL query to execute (should be a COUNT or similar query)
+ * @return True if the query returns a non-zero result, false otherwise
+ */
+bool query_returns_results(const std::string& query) {
+    MYSQL* conn = create_connection();
+    if (!conn) return false;
+
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+        mysql_close(conn);
+        return false;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    bool has_results = false;
+    
+    if (result) {
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (row && row[0]) {
+            // Convert the first column to an integer
+            has_results = (std::stoi(row[0]) > 0);
+        }
+        mysql_free_result(result);
+    }
+    
+    mysql_close(conn);
+    return has_results;
+}
+
 } // end namespace DAL
 
 /***********************************************************

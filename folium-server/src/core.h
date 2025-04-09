@@ -19,8 +19,7 @@
 
 namespace Core
 {
-    std::string getNote(int noteID, int userID);                          // Retrieve data by ID
-    void updateNote(int noteID, const std::string &noteDATA);             // Update data by ID
+    std::string getNote(int noteID, int userID);                          // Retrieve data by ID           // Update data by ID
     void createNote(int noteID, int userID, const std::string &noteDATA); // Create new data
     void editNote(int noteID, int userID, const std::string &noteDATA);   // Edit data by ID
 }

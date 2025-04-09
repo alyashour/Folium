@@ -96,6 +96,16 @@ namespace DAL {
      * @param data The JSON object to write to the file.
      */
     void write_json_file(const nlohmann::json& data);
+
+    /**
+     * @brief Execute an SQL query on the database
+     * @param query The SQL query to execute
+     * @return True if the query was executed successfully, false otherwise
+     * @throws std::runtime_error if the database connection fails
+     */
+    bool execute_query(const std::string& query);
+
+    
 }
 
 #endif // FOLSERV_DATA_ACCESS_LAYER_H_

@@ -42,6 +42,8 @@ configure_file(
 
 # Include the generated directory for version info
 include_directories(${CMAKE_BINARY_DIR}/generated)
+include_directories(/opt/homebrew/opt/mysql-client/include)
+link_directories(/opt/homebrew/opt/mysql-client/lib)
 
 ## INSTALL PACKAGES ##
 
@@ -81,6 +83,7 @@ add_library(folium-core
     src/http_gateway.cc
     src/logger.cc
     src/pipe-filter.cc
+    src/api_routes.cc 
 )
 
 # Set include directories for the library

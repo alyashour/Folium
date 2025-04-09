@@ -39,7 +39,7 @@
 ### POST /api/auth/refresh-token
 - **Description:** Refreshes the user's authentication token.
 - **Inputs:**
-  - `refreshToken` (string, required): The refresh token issued during login.
+  - `Token` (string, required): The refresh token issued during login.
 - **Outputs:**
   - **Success (200 OK):**
     - `token` (string): A new JSON Web Token for session management.

@@ -110,25 +110,27 @@ def refresh_token():
 
 @app.route("/api/auth/change-password", methods=["POST"])
 def change_password():
-    """
-    Change a user's password.
-    Expects JSON with 'username', 'old_password', and 'new_password'.
-    """
     data = request.get_json()
     if not data:
         abort(400, description="Invalid JSON")
-    username = data.get("username")
-    old_password = data.get("old_password")
-    new_password = data.get("new_password")
-    if not username or not old_password or not new_password:
+    
+    # Extract username from token or session if needed
+    # For this prototype, you could use a default username if not provided
+    username = data.get("username", "admin")  # Default to admin if not provided
+    
+    # Use the client parameter names
+    current_password = data.get("currentPassword")
+    new_password = data.get("newPassword")
+    
+    if not current_password or not new_password:
         abort(400, description="Missing required fields")
     
     user = users.get(username)
     if not user:
         return jsonify({"status": "error", "message": "User not found"}), 404
-    if user["password"] != old_password:
-        return jsonify({"status": "error", "message": "Old password is incorrect"}), 401
-    # Update password (for prototype, storing as plain text)
+    if user["password"] != current_password:
+        return jsonify({"status": "error", "message": "Current password is incorrect"}), 401
+        
     users[username]["password"] = new_password
     return jsonify({"status": "ok", "message": "Password changed successfully"}), 200
 

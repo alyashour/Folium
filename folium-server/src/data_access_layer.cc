@@ -18,9 +18,10 @@
  * All functions use robust error handling:
  *   - Errors are logged via Logger.
  *   - Exceptions are thrown to ensure the caller is informed.
- *   - No function fails quietly.
+ *   - No function fails silently.
  *
- * File I/O operations are thread safe via mutexes.
+ * File I/O operations now use per-file mutexes to ensure that each open file is independently
+ * protected, enabling concurrent operations on different files.
  */
 
 #include "data_access_layer.h"
@@ -34,17 +35,45 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <unordered_map>
+#include <memory>
+
+//----------------------------------------------------------------------
+// Global per-file mutex management
+//----------------------------------------------------------------------
 
 namespace {
-// Mutex used to protect file and JSON I/O.
-std::mutex fileMutex;
+    // Global mutex protects access to the file mutex map.
+    std::mutex globalFileMutexMapLock;
+    // Map each file path to its dedicated mutex.
+    std::unordered_map<std::string, std::shared_ptr<std::mutex>> fileMutexMap;
+
+    /**
+     * @brief Retrieve a mutex for the given file path.
+     *
+     * This function returns the shared pointer to the mutex for the file.
+     * If no mutex exists for the file, one is created.
+     *
+     * @param filePath The file path.
+     * @return A shared_ptr to the mutex guarding the file.
+     */
+    std::shared_ptr<std::mutex> getFileMutex(const std::string& filePath) {
+        std::lock_guard<std::mutex> lock(globalFileMutexMapLock);
+        auto it = fileMutexMap.find(filePath);
+        if (it == fileMutexMap.end()) {
+            auto mtx = std::make_shared<std::mutex>();
+            fileMutexMap[filePath] = mtx;
+            return mtx;
+        }
+        return it->second;
+    }
 }
 
-namespace DAL {
+//----------------------------------------------------------------------
+// Database Configuration and Connection
+//----------------------------------------------------------------------
 
-    //=======================================================================
-    // Database Configuration and Connection
-    //=======================================================================
+namespace DAL {
 
     /**
      * @brief A simple struct to hold DB connection parameters.
@@ -128,9 +157,9 @@ namespace DAL {
         return conn;
     }
 
-    //=======================================================================
+    //----------------------------------------------------------------------    
     // SQL Query Functions
-    //=======================================================================
+    //----------------------------------------------------------------------
 
     /**
      * @brief Retrieve the list of database tables.
@@ -303,20 +332,21 @@ namespace DAL {
         return filePath;
     }
 
-    //=======================================================================
-    // File and JSON I/O Functions (with mutex protection)
-    //=======================================================================
+    //----------------------------------------------------------------------    
+    // File and JSON I/O Functions (with per-file mutexes)
+    //----------------------------------------------------------------------
 
     /**
      * @brief Read the contents of a file.
      *
-     * The file I/O is protected by a mutex.
+     * Locks the mutex dedicated to the given file path.
      *
-     * @param file_path The file path to read.
+     * @param file_path The path of the file.
      * @return A string containing the file's content.
      */
     std::string readFile(const std::string& file_path) {
-        std::lock_guard<std::mutex> lock(fileMutex);
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
         std::ifstream in(file_path);
         if (!in.is_open()) {
             Logger::logErr("readFile: Cannot open file for reading: " + file_path);
@@ -331,14 +361,16 @@ namespace DAL {
     /**
      * @brief Write data to a file.
      *
-     * Protected by a mutex. On failure, an exception is thrown.
+     * Locks the mutex dedicated to the given file path.
+     * On failure, an exception is thrown.
      *
-     * @param file_path The path to write the file.
+     * @param file_path The file path to write.
      * @param data The data to write.
      * @return True if writing succeeded.
      */
     bool writeFile(const std::string& file_path, const std::string& data) {
-        std::lock_guard<std::mutex> lock(fileMutex);
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
         std::ofstream out(file_path);
         if (!out.is_open()) {
             Logger::logErr("writeFile: Cannot open file for writing: " + file_path);
@@ -368,13 +400,14 @@ namespace DAL {
     /**
      * @brief Read and parse a JSON file.
      *
-     * The JSON file I/O is protected by a mutex.
+     * Locks the per-file mutex and parses the JSON file.
      *
      * @param file_path The JSON file path.
      * @return A nlohmann::json object with the parsed content.
      */
     nlohmann::json readJsonFile(const std::string& file_path) {
-        std::lock_guard<std::mutex> lock(fileMutex);
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
         std::ifstream in(file_path);
         if (!in.is_open()) {
             Logger::logErr("readJsonFile: Cannot open JSON file for reading: " + file_path);
@@ -394,8 +427,8 @@ namespace DAL {
     /**
      * @brief Write a nlohmann::json object to a file.
      *
-     * The JSON data must contain a "file_path" field. If any error occurs during
-     * writing, an exception is thrown.
+     * The JSON data must contain a "file_path" field. Locks the corresponding mutex.
+     * Throws an exception on error.
      *
      * @param data The JSON object to write.
      */
@@ -405,7 +438,8 @@ namespace DAL {
             throw std::runtime_error("writeJsonFile: Missing 'file_path' field in JSON data.");
         }
         std::string file_path = data["file_path"].get<std::string>();
-        std::lock_guard<std::mutex> lock(fileMutex);
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
         std::ofstream out(file_path);
         if (!out.is_open()) {
             Logger::logErr("writeJsonFile: Cannot open file for writing JSON: " + file_path);
@@ -424,15 +458,14 @@ namespace DAL {
         Logger::logDebug("writeJsonFile: Successfully wrote JSON file: " + file_path);
     }
 
-    //=======================================================================
+    //----------------------------------------------------------------------    
     // Authentication Functions
-    //=======================================================================
+    //----------------------------------------------------------------------
 
     /**
      * @brief Retrieve a user by username.
      *
-     * Executes a query on the "users" table. If any SQL error occurs,
-     * an exception is thrown. Returns std::nullopt if no user is found.
+     * Executes a query on the "users" table. Returns std::nullopt if not found.
      *
      * @param username The username to search for.
      * @return An optional User object.
@@ -443,7 +476,7 @@ namespace DAL {
             return std::nullopt;
         }
         MYSQL* conn = createConnection();
-        // For simplicity, constructing the query directly. For production, use prepared statements.
+        // Note: For simplicity, building the query directly. Consider prepared statements for production.
         std::string query = "SELECT id, username, password_hash FROM users WHERE username = '" + username + "' LIMIT 1;";
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
@@ -482,7 +515,7 @@ namespace DAL {
      *
      * @param username The user's username.
      * @param hashedPassword The user's hashed password.
-     * @return True if the insertion succeeded.
+     * @return True if insertion succeeded.
      */
     bool createUser(const std::string& username, const std::string& hashedPassword) {
         if (username.empty() || hashedPassword.empty()) {
@@ -511,7 +544,7 @@ namespace DAL {
      *
      * @param username The username.
      * @param newHashedPassword The new hashed password.
-     * @return True if the update succeeded.
+     * @return True if update succeeded.
      */
     bool updateUserPassword(const std::string& username, const std::string& newHashedPassword) {
         if (username.empty() || newHashedPassword.empty()) {
@@ -538,8 +571,8 @@ namespace DAL {
 /* ---------------------------------------------------------------------------
    Example Usage (for integration reference)
 
-   // The following code demonstrates how to use the Data Access Layer.
-   // Place this code in a separate source file (e.g., example.cc) for testing or integration.
+   // The following commented code demonstrates how to use the Data Access Layer.
+   // Place it in a separate source file (e.g., example.cc) for testing or integration.
 
    #include "data_access_layer.h"
    #include "logger.h"

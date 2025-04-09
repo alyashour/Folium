@@ -6,23 +6,32 @@
 
 namespace Core {
 
-// Retrieve a note by its ID and user ID
-std::string getNote(int noteID, int userID) {
+// Retrieve the big note for a specific class
+std::string getBigNote(int classId, int userId) {
     try {
-        // Verify user has access to this note
+        // Verify user has access to this class
         std::ostringstream accessCheckStream;
-        accessCheckStream << "SELECT COUNT(*) FROM notes n "
-                         << "INNER JOIN user_classes uc ON n.class_id = uc.class_id "
-                         << "WHERE n.id = " << noteID << " AND uc.user_id = " << userID << ";";
+        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
+                         << "WHERE class_id = " << classId 
+                         << " AND user_id = " << userId << ";";
         
-        // This is a hypothetical function that would need to be implemented in your DAL
-        // to check if a query returns a non-zero count
         if (!DAL::query_returns_results(accessCheckStream.str())) {
-            throw std::runtime_error("User does not have access to this note or note does not exist.");
+            throw std::runtime_error("User does not have access to this class.");
+        }
+        
+        // Check if the class has a note
+        std::ostringstream noteExistsQuery;
+        noteExistsQuery << "SELECT COUNT(*) FROM notes WHERE class_id = " << classId << ";";
+        
+        if (!DAL::query_returns_results(noteExistsQuery.str())) {
+            throw std::runtime_error("No big note exists for this class.");
         }
         
         // Use DAL to retrieve the file path for the note
-        std::string filePath = DAL::get_note_file_path(noteID);
+        std::ostringstream filePathQuery;
+        filePathQuery << "SELECT file_path FROM notes WHERE class_id = " << classId << ";";
+        
+        std::string filePath = DAL::get_single_result(filePathQuery.str());
         if (filePath.empty()) {
             throw std::runtime_error("Note file path could not be retrieved from database.");
         }
@@ -35,78 +44,186 @@ std::string getNote(int noteID, int userID) {
 
         return noteContent;
     } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to retrieve note: " + std::string(e.what()));
+        throw std::runtime_error("Failed to retrieve big note: " + std::string(e.what()));
     }
 }
 
-// Create a new note
-void createNote(int noteID, int userID, int classID, const std::string& noteDATA) {
+// Create a new big note for a class
+bool createBigNote(int classId, int userId, const std::string& content, const std::string& title) {
     try {
+        // Verify user has access to create notes for this class
+        std::ostringstream accessCheckStream;
+        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
+                         << "WHERE class_id = " << classId 
+                         << " AND user_id = " << userId << ";";
+        
+        if (!DAL::query_returns_results(accessCheckStream.str())) {
+            throw std::runtime_error("User is not enrolled in this class.");
+        }
+        
+        // Check if a note already exists for this class
+        std::ostringstream noteExistsQuery;
+        noteExistsQuery << "SELECT COUNT(*) FROM notes WHERE class_id = " << classId << ";";
+        
+        if (DAL::query_returns_results(noteExistsQuery.str())) {
+            throw std::runtime_error("A big note already exists for this class. Use editBigNote instead.");
+        }
+        
         // Ensure the notes directory exists
         std::filesystem::create_directories("notes");
         
-        // Define a file path for the new note (e.g., based on noteID)
+        // Define a file path for the new note
         std::ostringstream filePathStream;
-        filePathStream << "notes/note_" << noteID << ".txt";
+        filePathStream << "notes/class_" << classId << "_note.txt";
         std::string filePath = filePathStream.str();
 
         // Use DAL to write the note content to the file
-        if (!DAL::write_file(filePath, noteDATA)) {
+        if (!DAL::write_file(filePath, content)) {
             throw std::runtime_error("Failed to write note content to file at path: " + filePath);
         }
 
         // Insert the note into the database
         std::ostringstream queryStream;
-        queryStream << "INSERT INTO notes (id, class_id, file_path, created_at, last_modified) VALUES ("
-                   << noteID << ", " << classID << ", '" << filePath << "', NOW(), NOW());";
+        queryStream << "INSERT INTO notes (class_id, title, file_path) VALUES ("
+                   << classId << ", '" << DAL::escape_string(title) << "', '" << DAL::escape_string(filePath) << "');";
         std::string query = queryStream.str();
 
         if (!DAL::execute_query(query)) {
-            // If the insertion failed, attempt to remove the created file to maintain consistency
+            // If the insertion failed, attempt to remove the created file
             std::remove(filePath.c_str());
             throw std::runtime_error("Failed to insert note into database.");
         }
+        
+        return true;
     } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to create note: " + std::string(e.what()));
+        throw std::runtime_error("Failed to create big note: " + std::string(e.what()));
     }
+    return false;
 }
 
-// Edit an existing note
-void editNote(int noteID, int userID, const std::string& noteDATA) {
+// Upload and integrate a new note
+bool uploadNote(int classId, int userId, const std::string& filePath, const std::string& title) {
     try {
-        // Verify user has access to this note
+        // Verify user has access to this class
         std::ostringstream accessCheckStream;
-        accessCheckStream << "SELECT COUNT(*) FROM notes n "
-                         << "INNER JOIN user_classes uc ON n.class_id = uc.class_id "
-                         << "WHERE n.id = " << noteID << " AND uc.user_id = " << userID << ";";
+        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
+                         << "WHERE class_id = " << classId 
+                         << " AND user_id = " << userId << ";";
         
-        // Again, this is a hypothetical function
         if (!DAL::query_returns_results(accessCheckStream.str())) {
-            throw std::runtime_error("User does not have access to this note or note does not exist.");
+            throw std::runtime_error("User is not enrolled in this class.");
+        }
+        
+        // Read the uploaded file content
+        std::string uploadedContent = DAL::read_file(filePath);
+        if (uploadedContent.empty()) {
+            throw std::runtime_error("Uploaded file is empty or could not be read.");
+        }
+        
+        // Check if a big note already exists for this class
+        std::ostringstream noteExistsQuery;
+        noteExistsQuery << "SELECT COUNT(*) FROM notes WHERE class_id = " << classId << ";";
+        
+        if (!DAL::query_returns_results(noteExistsQuery.str())) {
+            // If no big note exists, create one with this content
+            return createBigNote(classId, userId, uploadedContent, title.empty() ? "Uploaded Note" : title);
+        } else {
+            // If a big note exists, integrate this content
+            std::ostringstream filePathQuery;
+            filePathQuery << "SELECT file_path FROM notes WHERE class_id = " << classId << ";";
+            
+            std::string existingFilePath = DAL::get_single_result(filePathQuery.str());
+            if (existingFilePath.empty()) {
+                throw std::runtime_error("Existing note file path could not be retrieved.");
+            }
+            
+            // Read existing content
+            std::string existingContent = DAL::read_file(existingFilePath);
+            
+            // Integrate the new content with existing content
+            // This could be a simple append or a more sophisticated merge algorithm
+            std::string integratedContent = existingContent + "\n\n--- New Upload ---\n\n" + uploadedContent;
+            
+            // Write the integrated content back to the file
+            if (!DAL::write_file(existingFilePath, integratedContent)) {
+                throw std::runtime_error("Failed to write integrated content to file.");
+            }
+            
+            // Update the database timestamp
+            std::ostringstream updateQuery;
+            updateQuery << "UPDATE notes SET updated_at = NOW() WHERE class_id = " << classId << ";";
+            
+            if (!DAL::execute_query(updateQuery.str())) {
+                throw std::runtime_error("Failed to update note timestamp in database.");
+            }
+            
+            return true;
+        }
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to upload note: " + std::string(e.what()));
+    }
+    return false;
+}
+
+// Edit the big note for a class
+bool editBigNote(int classId, int userId, const std::string& content, const std::string& title) {
+    try {
+        // Verify user has access to this class
+        std::ostringstream accessCheckStream;
+        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
+                         << "WHERE class_id = " << classId 
+                         << " AND user_id = " << userId << ";";
+        
+        if (!DAL::query_returns_results(accessCheckStream.str())) {
+            throw std::runtime_error("User is not enrolled in this class.");
+        }
+        
+        // Check if a note exists for this class
+        std::ostringstream noteExistsQuery;
+        noteExistsQuery << "SELECT COUNT(*) FROM notes WHERE class_id = " << classId << ";";
+        
+        if (!DAL::query_returns_results(noteExistsQuery.str())) {
+            throw std::runtime_error("No big note exists for this class. Use createBigNote first.");
         }
         
         // Use DAL to retrieve the file path for the note
-        std::string filePath = DAL::get_note_file_path(noteID);
+        std::ostringstream filePathQuery;
+        filePathQuery << "SELECT file_path FROM notes WHERE class_id = " << classId << ";";
+        
+        std::string filePath = DAL::get_single_result(filePathQuery.str());
         if (filePath.empty()) {
             throw std::runtime_error("Note file path could not be retrieved from database.");
         }
 
         // Use DAL to write the updated content to the file
-        if (!DAL::write_file(filePath, noteDATA)) {
+        if (!DAL::write_file(filePath, content)) {
             throw std::runtime_error("Failed to write updated note content to file at path: " + filePath);
         }
 
-        // Update the last_modified timestamp in the database
-        std::ostringstream queryStream;
-        queryStream << "UPDATE notes SET last_modified = NOW() WHERE id = " << noteID << ";";
-        std::string query = queryStream.str();
-
-        if (!DAL::execute_query(query)) {
-            throw std::runtime_error("Failed to update note timestamp in database.");
+        // Update the database with the new title if provided
+        if (!title.empty()) {
+            std::ostringstream updateTitleQuery;
+            updateTitleQuery << "UPDATE notes SET title = '" << DAL::escape_string(title) 
+                            << "', updated_at = NOW() WHERE class_id = " << classId << ";";
+            
+            if (!DAL::execute_query(updateTitleQuery.str())) {
+                throw std::runtime_error("Failed to update note title in database.");
+            }
+        } else {
+            // Just update the timestamp
+            std::ostringstream updateQuery;
+            updateQuery << "UPDATE notes SET updated_at = NOW() WHERE class_id = " << classId << ";";
+            
+            if (!DAL::execute_query(updateQuery.str())) {
+                throw std::runtime_error("Failed to update note timestamp in database.");
+            }
         }
+        
+        return true;
     } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to edit note: " + std::string(e.what()));
+        throw std::runtime_error("Failed to edit big note: " + std::string(e.what()));
     }
+    return false;
 }
 
 } // namespace Core

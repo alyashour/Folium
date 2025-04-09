@@ -366,6 +366,63 @@ bool execute_query(const std::string& query) {
     mysql_close(conn);
     return success;
 }
+/**
+ * @brief Escape a string to make it safe for use in SQL queries
+ * @param input The string to escape
+ * @return The escaped string
+ */
+std::string escape_string(const std::string& input) {
+    MYSQL* conn = create_connection();
+    if (!conn) {
+        std::cerr << "[ERROR] Failed to connect to database for string escaping." << std::endl;
+        // Basic fallback escaping for single quotes
+        std::string result = input;
+        size_t pos = 0;
+        while ((pos = result.find("'", pos)) != std::string::npos) {
+            result.replace(pos, 1, "''");
+            pos += 2;
+        }
+        return result;
+    }
+
+    char* escaped = new char[input.length() * 2 + 1];
+    mysql_real_escape_string(conn, escaped, input.c_str(), input.length());
+    std::string result(escaped);
+    delete[] escaped;
+    mysql_close(conn);
+    return result;
+}
+
+/**
+ * @brief Execute a query and return the first column of the first row
+ * @param query The SQL query to execute
+ * @return The result string, or empty if no results
+ */
+std::string get_single_result(const std::string& query) {
+    MYSQL* conn = create_connection();
+    if (!conn) {
+        std::cerr << "[ERROR] Failed to connect to database for query." << std::endl;
+        return "";
+    }
+
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+        mysql_close(conn);
+        return "";
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    std::string value;
+    if (result) {
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (row && row[0]) {
+            value = row[0];
+        }
+        mysql_free_result(result);
+    }
+    mysql_close(conn);
+    return value;
+}
 
 /**
  * @brief Check if a query returns any results

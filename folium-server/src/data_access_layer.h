@@ -105,6 +105,12 @@ namespace DAL {
      */
     bool execute_query(const std::string& query);
 
+    /**
+     * @brief Check if a query returns any results
+     * @param query The SQL query to execute (should be a COUNT or similar query)
+     * @return True if the query returns a non-zero result, false otherwise
+     */
+    bool query_returns_results(const std::string& query);
     
 }
 

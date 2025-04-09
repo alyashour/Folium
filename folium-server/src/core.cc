@@ -6,45 +6,23 @@
 
 namespace Core {
 
-// Retrieve a note by its class ID and user ID
-std::string getNote(int classID, int userID) {
+// Retrieve a note by its ID and user ID
+std::string getNote(int noteID, int userID) {
     try {
-        // Verify user has access to this class note
+        // Verify user has access to this note
         std::ostringstream accessCheckStream;
-        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
-                         << "WHERE class_id = " << classID 
-                         << " AND user_id = " << userID << ";";
+        accessCheckStream << "SELECT COUNT(*) FROM notes n "
+                         << "INNER JOIN user_classes uc ON n.class_id = uc.class_id "
+                         << "WHERE n.id = " << noteID << " AND uc.user_id = " << userID << ";";
         
+        // This is a hypothetical function that would need to be implemented in your DAL
+        // to check if a query returns a non-zero count
         if (!DAL::query_returns_results(accessCheckStream.str())) {
-            throw std::runtime_error("User is not enrolled in this class.");
+            throw std::runtime_error("User does not have access to this note or note does not exist.");
         }
         
-        // Use DAL to retrieve the file path for the class note
-        std::ostringstream filePathQueryStream;
-        filePathQueryStream << "SELECT file_path FROM notes WHERE class_id = " << classID << ";";
-        
-        std::string filePath;
-        MYSQL* conn = DAL::create_connection();
-        if (!conn) {
-            throw std::runtime_error("Database connection failed.");
-        }
-
-        if (mysql_query(conn, filePathQueryStream.str().c_str())) {
-            std::string error = mysql_error(conn);
-            mysql_close(conn);
-            throw std::runtime_error("Query failed: " + error);
-        }
-
-        MYSQL_RES* result = mysql_store_result(conn);
-        if (result) {
-            MYSQL_ROW row = mysql_fetch_row(result);
-            if (row && row[0]) {
-                filePath = row[0];
-            }
-            mysql_free_result(result);
-        }
-        mysql_close(conn);
-
+        // Use DAL to retrieve the file path for the note
+        std::string filePath = DAL::get_note_file_path(noteID);
         if (filePath.empty()) {
             throw std::runtime_error("Note file path could not be retrieved from database.");
         }
@@ -61,48 +39,30 @@ std::string getNote(int classID, int userID) {
     }
 }
 
-// Create a new class note
-void createNote(int classID, int userID, const std::string& title, const std::string& noteData) {
+// Create a new note
+void createNote(int noteID, int userID, int classID, const std::string& noteDATA) {
     try {
-        // Verify user has access to create notes for this class (usually should be instructor/owner)
-        std::ostringstream accessCheckStream;
-        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
-                         << "WHERE class_id = " << classID 
-                         << " AND user_id = " << userID << ";";
-        
-        if (!DAL::query_returns_results(accessCheckStream.str())) {
-            throw std::runtime_error("User is not enrolled in this class.");
-        }
-        
-        // Check if a note already exists for this class
-        std::ostringstream noteExistsQuery;
-        noteExistsQuery << "SELECT COUNT(*) FROM notes WHERE class_id = " << classID << ";";
-        
-        if (DAL::query_returns_results(noteExistsQuery.str())) {
-            throw std::runtime_error("A note already exists for this class. Use editNote instead.");
-        }
-        
         // Ensure the notes directory exists
         std::filesystem::create_directories("notes");
         
-        // Define a file path for the new note
+        // Define a file path for the new note (e.g., based on noteID)
         std::ostringstream filePathStream;
-        filePathStream << "notes/class_" << classID << "_note.txt";
+        filePathStream << "notes/note_" << noteID << ".txt";
         std::string filePath = filePathStream.str();
 
         // Use DAL to write the note content to the file
-        if (!DAL::write_file(filePath, noteData)) {
+        if (!DAL::write_file(filePath, noteDATA)) {
             throw std::runtime_error("Failed to write note content to file at path: " + filePath);
         }
 
         // Insert the note into the database
         std::ostringstream queryStream;
-        queryStream << "INSERT INTO notes (class_id, title, file_path) VALUES ("
-                   << classID << ", '" << title << "', '" << filePath << "');";
+        queryStream << "INSERT INTO notes (id, class_id, file_path, created_at, last_modified) VALUES ("
+                   << noteID << ", " << classID << ", '" << filePath << "', NOW(), NOW());";
         std::string query = queryStream.str();
 
         if (!DAL::execute_query(query)) {
-            // If the insertion failed, attempt to remove the created file
+            // If the insertion failed, attempt to remove the created file to maintain consistency
             std::remove(filePath.c_str());
             throw std::runtime_error("Failed to insert note into database.");
         }
@@ -111,56 +71,39 @@ void createNote(int classID, int userID, const std::string& title, const std::st
     }
 }
 
-// Edit an existing class note
-void editNote(int classID, int userID, const std::string& noteData) {
+// Edit an existing note
+void editNote(int noteID, int userID, const std::string& noteDATA) {
     try {
-        // Verify user has access to this class
+        // Verify user has access to this note
         std::ostringstream accessCheckStream;
-        accessCheckStream << "SELECT COUNT(*) FROM user_classes "
-                         << "WHERE class_id = " << classID 
-                         << " AND user_id = " << userID << ";";
+        accessCheckStream << "SELECT COUNT(*) FROM notes n "
+                         << "INNER JOIN user_classes uc ON n.class_id = uc.class_id "
+                         << "WHERE n.id = " << noteID << " AND uc.user_id = " << userID << ";";
         
+        // Again, this is a hypothetical function
         if (!DAL::query_returns_results(accessCheckStream.str())) {
-            throw std::runtime_error("User is not enrolled in this class.");
+            throw std::runtime_error("User does not have access to this note or note does not exist.");
         }
         
         // Use DAL to retrieve the file path for the note
-        std::ostringstream filePathQueryStream;
-        filePathQueryStream << "SELECT file_path FROM notes WHERE class_id = " << classID << ";";
-        
-        std::string filePath;
-        MYSQL* conn = DAL::create_connection();
-        if (!conn) {
-            throw std::runtime_error("Database connection failed.");
-        }
-
-        if (mysql_query(conn, filePathQueryStream.str().c_str())) {
-            std::string error = mysql_error(conn);
-            mysql_close(conn);
-            throw std::runtime_error("Query failed: " + error);
-        }
-
-        MYSQL_RES* result = mysql_store_result(conn);
-        if (result) {
-            MYSQL_ROW row = mysql_fetch_row(result);
-            if (row && row[0]) {
-                filePath = row[0];
-            }
-            mysql_free_result(result);
-        }
-        mysql_close(conn);
-
+        std::string filePath = DAL::get_note_file_path(noteID);
         if (filePath.empty()) {
             throw std::runtime_error("Note file path could not be retrieved from database.");
         }
 
         // Use DAL to write the updated content to the file
-        if (!DAL::write_file(filePath, noteData)) {
+        if (!DAL::write_file(filePath, noteDATA)) {
             throw std::runtime_error("Failed to write updated note content to file at path: " + filePath);
         }
 
-        // Note: The updated_at timestamp will be updated automatically in the database
-        // due to the ON UPDATE CURRENT_TIMESTAMP in the schema
+        // Update the last_modified timestamp in the database
+        std::ostringstream queryStream;
+        queryStream << "UPDATE notes SET last_modified = NOW() WHERE id = " << noteID << ";";
+        std::string query = queryStream.str();
+
+        if (!DAL::execute_query(query)) {
+            throw std::runtime_error("Failed to update note timestamp in database.");
+        }
     } catch (const std::exception& e) {
         throw std::runtime_error("Failed to edit note: " + std::string(e.what()));
     }

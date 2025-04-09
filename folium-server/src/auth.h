@@ -102,6 +102,15 @@ namespace auth {
      * @return false always (logged-in state is determined by token validation).
      */
     bool isLoggedIn(const std::string& username);
+
+    /**
+     * @brief Function to change a user's password.
+     * @param username The username of the user.
+     * @param oldPassword The user's current password.
+     * @param newPassword The new password to set.
+     * @return true if the password was successfully changed, false otherwise.
+     */
+    bool changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword);
 }
 
 #endif // FOLSERV_AUTH_H_

@@ -90,7 +90,7 @@ namespace Dispatcher
 
     // Start the listener thread. The callback will be invoked for each IPC task received.
     // The FIFO paths are already stored in the object.
-    void DispatcherImpl::startListener(const std::function<void(const ipc::Task &)> &callback)
+    void DispatcherImpl::startListener(const std::function<void(const F_Task &)> &callback)
     {
         listenerThread = std::thread(&DispatcherImpl::listen, this, callback);
     }
@@ -123,7 +123,7 @@ namespace Dispatcher
     }
 
     // Listener function that continuously reads IPC tasks.
-    void DispatcherImpl::listen(const std::function<void(const ipc::Task &)> &callback)
+    void DispatcherImpl::listen(const std::function<void(const F_Task &)> &callback)
     {
         // Open FIFO channels (blocking mode, auto-create if needed is assumed)
         ipc::Task ipcTask;
@@ -199,7 +199,7 @@ namespace Dispatcher
                 break;
             case EDIT_NOTE:
                 std::cout << "[Worker] Processing EDIT_NOTE task.\n";
-                Core::editNote(prioritizedTask.task.noteID,
+                Core::editBNote(prioritizedTask.task.noteID,
                                prioritizedTask.task.userID,
                                prioritizedTask.task.noteData);
                 break;

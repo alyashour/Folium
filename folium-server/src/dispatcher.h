@@ -40,10 +40,10 @@ namespace Dispatcher
 
 struct PrioritizedTask
     {
-        ExtendedTask task;
+        ExtendedTask* task;
         int priority; // Lower value indicates higher priority.
 
-        PrioritizedTask(const ExtendedTask &t, int p)
+        PrioritizedTask(ExtendedTask* t, int p)
             : task(t), priority(p) {}
     };
 
@@ -69,14 +69,14 @@ struct PrioritizedTask
 
         // Start the listener thread. The callback will be invoked for each IPC task received.
         // The FIFO paths are already stored in the object.
-        void startListener(const std::function<void(const ipc::Task &)> &callback);
+        void startListener(const std::function<void(const F_Task &)> &callback);
 
         // Add a task to the dispatcher.
         void addTask(const ExtendedTask &task);
 
     private:
         // Listener function that continuously reads IPC tasks.
-        void listen(const std::function<void(const ipc::Task &)> &callback);
+        void listen(const std::function<void(const F_Task &)> &callback);
 
         // New function: Start the listener on a separate thread.
         void start(const std::string &reqFifoPath, const std::string &resFifoPath);

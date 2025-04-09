@@ -16,7 +16,7 @@
  * }
  *
  * All functions use robust error handling:
- *   - Errors are logged via Logger.
+ *   - Errors are logged via the new Logger instance.
  *   - Exceptions are thrown to ensure the caller is informed.
  *   - No function fails silently.
  *
@@ -71,6 +71,12 @@ namespace {
 }
 
 //----------------------------------------------------------------------
+// Create a dedicated logger for DAL
+//----------------------------------------------------------------------
+
+static Logger::Logger dalLogger("DAL");
+
+//----------------------------------------------------------------------
 // Database Configuration and Connection
 //----------------------------------------------------------------------
 
@@ -100,14 +106,14 @@ namespace DAL {
         if (!loaded) {
             std::ifstream configFile("dbConfig.json");
             if (!configFile.is_open()) {
-                Logger::logErr("getDbConfig: Unable to open dbConfig.json. Check file path.");
+                dalLogger.logErr("getDbConfig: Unable to open dbConfig.json. Check file path.");
                 throw std::runtime_error("getDbConfig: Unable to open dbConfig.json.");
             }
             nlohmann::json j;
             try {
                 configFile >> j;
             } catch (const std::exception &e) {
-                Logger::logErr("getDbConfig: JSON parse error: " + std::string(e.what()));
+                dalLogger.logErr("getDbConfig: JSON parse error: " + std::string(e.what()));
                 throw;
             }
             config.host     = j.value("mysql_host", "127.0.0.1");
@@ -137,7 +143,7 @@ namespace DAL {
         }
         MYSQL *conn = mysql_init(nullptr);
         if (!conn) {
-            Logger::logErr("createConnection: mysql_init() failed.");
+            dalLogger.logErr("createConnection: mysql_init() failed.");
             throw std::runtime_error("createConnection: mysql_init() failed.");
         }
         if (!mysql_real_connect(
@@ -151,7 +157,7 @@ namespace DAL {
                 0))
         {
             std::string errMsg = mysql_error(conn);
-            Logger::logErr("createConnection: mysql_real_connect() failed: " + errMsg);
+            dalLogger.logErr("createConnection: mysql_real_connect() failed: " + errMsg);
             mysql_close(conn);
             throw std::runtime_error("createConnection: mysql_real_connect() failed: " + errMsg);
         }
@@ -175,14 +181,14 @@ namespace DAL {
         const char* query = "SHOW TABLES;";
         if (mysql_query(conn, query)) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getTables: Query failed: " + err);
+            dalLogger.logErr("getTables: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("getTables: Query failed: " + err);
         }
         MYSQL_RES* result = mysql_store_result(conn);
         if (!result) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getTables: Failed to retrieve result: " + err);
+            dalLogger.logErr("getTables: Failed to retrieve result: " + err);
             mysql_close(conn);
             throw std::runtime_error("getTables: Failed to retrieve result: " + err);
         }
@@ -208,7 +214,7 @@ namespace DAL {
      */
     std::vector<int> getClassIds(const unsigned int user_id) {
         if (user_id == 0) {
-            Logger::logErr("getClassIds: Invalid user ID (0) provided.");
+            dalLogger.logErr("getClassIds: Invalid user ID (0) provided.");
             throw std::invalid_argument("getClassIds: user_id must be non-zero.");
         }
         MYSQL* conn = createConnection();
@@ -217,14 +223,14 @@ namespace DAL {
         std::string query = ss.str();
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getClassIds: Query failed: " + err);
+            dalLogger.logErr("getClassIds: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("getClassIds: Query failed: " + err);
         }
         MYSQL_RES* result = mysql_store_result(conn);
         if (!result) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getClassIds: Failed to retrieve result: " + err);
+            dalLogger.logErr("getClassIds: Failed to retrieve result: " + err);
             mysql_close(conn);
             throw std::runtime_error("getClassIds: Failed to retrieve result: " + err);
         }
@@ -238,7 +244,7 @@ namespace DAL {
         }
         mysql_free_result(result);
         mysql_close(conn);
-        Logger::logDebug("getClassIds: Retrieved class ids for user " + std::to_string(user_id));
+        dalLogger.logDebug("getClassIds: Retrieved class ids for user " + std::to_string(user_id));
         return classIds;
     }
 
@@ -252,7 +258,7 @@ namespace DAL {
      */
     std::vector<int> getNoteIds(const unsigned int user_id) {
         if (user_id == 0) {
-            Logger::logErr("getNoteIds: Invalid user ID (0) provided.");
+            dalLogger.logErr("getNoteIds: Invalid user ID (0) provided.");
             throw std::invalid_argument("getNoteIds: user_id must be non-zero.");
         }
         MYSQL* conn = createConnection();
@@ -262,14 +268,14 @@ namespace DAL {
         std::string query = ss.str();
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getNoteIds: Query failed: " + err);
+            dalLogger.logErr("getNoteIds: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("getNoteIds: Query failed: " + err);
         }
         MYSQL_RES* result = mysql_store_result(conn);
         if (!result) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getNoteIds: Failed to retrieve result: " + err);
+            dalLogger.logErr("getNoteIds: Failed to retrieve result: " + err);
             mysql_close(conn);
             throw std::runtime_error("getNoteIds: Failed to retrieve result: " + err);
         }
@@ -283,7 +289,7 @@ namespace DAL {
         }
         mysql_free_result(result);
         mysql_close(conn);
-        Logger::logDebug("getNoteIds: Retrieved note ids for user " + std::to_string(user_id));
+        dalLogger.logDebug("getNoteIds: Retrieved note ids for user " + std::to_string(user_id));
         return noteIds;
     }
 
@@ -297,7 +303,7 @@ namespace DAL {
      */
     std::string getNoteFilePath(const unsigned int note_id) {
         if (note_id == 0) {
-            Logger::logErr("getNoteFilePath: Invalid note id (0) provided.");
+            dalLogger.logErr("getNoteFilePath: Invalid note id (0) provided.");
             throw std::invalid_argument("getNoteFilePath: note_id must be non-zero.");
         }
         MYSQL* conn = createConnection();
@@ -306,14 +312,14 @@ namespace DAL {
         std::string query = ss.str();
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getNoteFilePath: Query failed: " + err);
+            dalLogger.logErr("getNoteFilePath: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("getNoteFilePath: Query failed: " + err);
         }
         MYSQL_RES* result = mysql_store_result(conn);
         if (!result) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getNoteFilePath: Failed to retrieve result: " + err);
+            dalLogger.logErr("getNoteFilePath: Failed to retrieve result: " + err);
             mysql_close(conn);
             throw std::runtime_error("getNoteFilePath: Failed to retrieve result: " + err);
         }
@@ -322,14 +328,14 @@ namespace DAL {
         if (row && row[0]) {
             filePath = row[0];
         } else {
-            Logger::logErr("getNoteFilePath: No file path found for note id " + std::to_string(note_id));
+            dalLogger.logErr("getNoteFilePath: No file path found for note id " + std::to_string(note_id));
             mysql_free_result(result);
             mysql_close(conn);
             throw std::runtime_error("getNoteFilePath: File path not found for note id " + std::to_string(note_id));
         }
         mysql_free_result(result);
         mysql_close(conn);
-        Logger::logDebug("getNoteFilePath: Retrieved file path for note " + std::to_string(note_id));
+        dalLogger.logDebug("getNoteFilePath: Retrieved file path for note " + std::to_string(note_id));
         return filePath;
     }
 
@@ -350,12 +356,12 @@ namespace DAL {
         std::lock_guard<std::mutex> lock(*fileMtx);
         std::ifstream in(file_path);
         if (!in.is_open()) {
-            Logger::logErr("readFile: Cannot open file for reading: " + file_path);
+            dalLogger.logErr("readFile: Cannot open file for reading: " + file_path);
             throw std::runtime_error("readFile: Cannot open file: " + file_path);
         }
         std::ostringstream ss;
         ss << in.rdbuf();
-        Logger::logDebug("readFile: Successfully read file: " + file_path);
+        dalLogger.logDebug("readFile: Successfully read file: " + file_path);
         return ss.str();
     }
 
@@ -374,15 +380,15 @@ namespace DAL {
         std::lock_guard<std::mutex> lock(*fileMtx);
         std::ofstream out(file_path);
         if (!out.is_open()) {
-            Logger::logErr("writeFile: Cannot open file for writing: " + file_path);
+            dalLogger.logErr("writeFile: Cannot open file for writing: " + file_path);
             throw std::runtime_error("writeFile: Cannot open file: " + file_path);
         }
         out << data;
         if (!out.good()) {
-            Logger::logErr("writeFile: Error occurred while writing to file: " + file_path);
+            dalLogger.logErr("writeFile: Error occurred while writing to file: " + file_path);
             throw std::runtime_error("writeFile: Failed to write file: " + file_path);
         }
-        Logger::logDebug("writeFile: Successfully wrote file: " + file_path);
+        dalLogger.logDebug("writeFile: Successfully wrote file: " + file_path);
         return true;
     }
 
@@ -411,17 +417,17 @@ namespace DAL {
         std::lock_guard<std::mutex> lock(*fileMtx);
         std::ifstream in(file_path);
         if (!in.is_open()) {
-            Logger::logErr("readJsonFile: Cannot open JSON file for reading: " + file_path);
+            dalLogger.logErr("readJsonFile: Cannot open JSON file for reading: " + file_path);
             throw std::runtime_error("readJsonFile: Cannot open file: " + file_path);
         }
         nlohmann::json j;
         try {
             in >> j;
         } catch (const std::exception& e) {
-            Logger::logErr("readJsonFile: Error parsing JSON from " + file_path + ": " + e.what());
+            dalLogger.logErr("readJsonFile: Error parsing JSON from " + file_path + ": " + e.what());
             throw std::runtime_error("readJsonFile: Failed to parse JSON file: " + file_path);
         }
-        Logger::logDebug("readJsonFile: Successfully read JSON file: " + file_path);
+        dalLogger.logDebug("readJsonFile: Successfully read JSON file: " + file_path);
         return j;
     }
 
@@ -435,7 +441,7 @@ namespace DAL {
      */
     void writeJsonFile(const nlohmann::json& data) {
         if (!data.contains("file_path")) {
-            Logger::logErr("writeJsonFile: JSON data does not contain a 'file_path' field.");
+            dalLogger.logErr("writeJsonFile: JSON data does not contain a 'file_path' field.");
             throw std::runtime_error("writeJsonFile: Missing 'file_path' field in JSON data.");
         }
         std::string file_path = data["file_path"].get<std::string>();
@@ -443,20 +449,20 @@ namespace DAL {
         std::lock_guard<std::mutex> lock(*fileMtx);
         std::ofstream out(file_path);
         if (!out.is_open()) {
-            Logger::logErr("writeJsonFile: Cannot open file for writing JSON: " + file_path);
+            dalLogger.logErr("writeJsonFile: Cannot open file for writing JSON: " + file_path);
             throw std::runtime_error("writeJsonFile: Cannot open JSON file: " + file_path);
         }
         try {
             out << data.dump(4);
         } catch (const std::exception& e) {
-            Logger::logErr("writeJsonFile: Error writing JSON data to " + file_path + ": " + e.what());
+            dalLogger.logErr("writeJsonFile: Error writing JSON data to " + file_path + ": " + e.what());
             throw std::runtime_error("writeJsonFile: Failed to write JSON file: " + file_path);
         }
         if (!out.good()) {
-            Logger::logErr("writeJsonFile: I/O error occurred while writing JSON file: " + file_path);
+            dalLogger.logErr("writeJsonFile: I/O error occurred while writing JSON file: " + file_path);
             throw std::runtime_error("writeJsonFile: I/O error writing JSON file: " + file_path);
         }
-        Logger::logDebug("writeJsonFile: Successfully wrote JSON file: " + file_path);
+        dalLogger.logDebug("writeJsonFile: Successfully wrote JSON file: " + file_path);
     }
 
     //----------------------------------------------------------------------    
@@ -473,7 +479,7 @@ namespace DAL {
      */
     std::optional<User> getUserByUsername(const std::string& username) {
         if (username.empty()) {
-            Logger::logWarn("getUserByUsername: Empty username provided.");
+            dalLogger.logWarn("getUserByUsername: Empty username provided.");
             return std::nullopt;
         }
         MYSQL* conn = createConnection();
@@ -481,14 +487,14 @@ namespace DAL {
         std::string query = "SELECT id, username, password_hash FROM users WHERE username = '" + username + "' LIMIT 1;";
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getUserByUsername: Query failed: " + err);
+            dalLogger.logErr("getUserByUsername: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("getUserByUsername: Query failed: " + err);
         }
         MYSQL_RES* result = mysql_store_result(conn);
         if (!result) {
             std::string err = mysql_error(conn);
-            Logger::logErr("getUserByUsername: Failed to retrieve result: " + err);
+            dalLogger.logErr("getUserByUsername: Failed to retrieve result: " + err);
             mysql_close(conn);
             throw std::runtime_error("getUserByUsername: Failed to retrieve result: " + err);
         }
@@ -500,9 +506,9 @@ namespace DAL {
             u.username = row[1] ? row[1] : "";
             u.password_hash = row[2] ? row[2] : "";
             user = u;
-            Logger::logDebug("getUserByUsername: Found user '" + username + "'");
+            dalLogger.logDebug("getUserByUsername: Found user '" + username + "'");
         } else {
-            Logger::logDebug("getUserByUsername: No user found for username: " + username);
+            dalLogger.logDebug("getUserByUsername: No user found for username: " + username);
         }
         mysql_free_result(result);
         mysql_close(conn);
@@ -520,7 +526,7 @@ namespace DAL {
      */
     bool createUser(const std::string& username, const std::string& hashedPassword) {
         if (username.empty() || hashedPassword.empty()) {
-            Logger::logErr("createUser: Username or hashedPassword is empty.");
+            dalLogger.logErr("createUser: Username or hashedPassword is empty.");
             throw std::invalid_argument("createUser: Username and hashedPassword cannot be empty.");
         }
         MYSQL* conn = createConnection();
@@ -529,12 +535,12 @@ namespace DAL {
         std::string query = ss.str();
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("createUser: Query failed: " + err);
+            dalLogger.logErr("createUser: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("createUser: Query failed: " + err);
         }
         mysql_close(conn);
-        Logger::logDebug("createUser: User '" + username + "' created successfully.");
+        dalLogger.logDebug("createUser: User '" + username + "' created successfully.");
         return true;
     }
 
@@ -549,7 +555,7 @@ namespace DAL {
      */
     bool updateUserPassword(const std::string& username, const std::string& newHashedPassword) {
         if (username.empty() || newHashedPassword.empty()) {
-            Logger::logErr("updateUserPassword: Username or newHashedPassword is empty.");
+            dalLogger.logErr("updateUserPassword: Username or newHashedPassword is empty.");
             throw std::invalid_argument("updateUserPassword: Username and newHashedPassword cannot be empty.");
         }
         MYSQL* conn = createConnection();
@@ -558,12 +564,12 @@ namespace DAL {
         std::string query = ss.str();
         if (mysql_query(conn, query.c_str())) {
             std::string err = mysql_error(conn);
-            Logger::logErr("updateUserPassword: Query failed: " + err);
+            dalLogger.logErr("updateUserPassword: Query failed: " + err);
             mysql_close(conn);
             throw std::runtime_error("updateUserPassword: Query failed: " + err);
         }
         mysql_close(conn);
-        Logger::logDebug("updateUserPassword: Password updated successfully for user: " + username);
+        dalLogger.logDebug("updateUserPassword: Password updated successfully for user: " + username);
         return true;
     }
 
@@ -690,55 +696,55 @@ bool query_returns_results(const std::string& query) {
        try {
            // Retrieve and log all table names.
            auto tables = DAL::getTables();
-           Logger::log("Tables in database:");
+           dalLogger.log("Tables in database:");
            for (const auto& table : tables) {
-               Logger::log(" - " + table);
+               dalLogger.log(" - " + table);
            }
            
            // Get class IDs for a user (e.g., user with ID 1).
            unsigned int userId = 1;
            auto classIds = DAL::getClassIds(userId);
-           Logger::log("Class IDs for user " + std::to_string(userId) + ":");
+           dalLogger.log("Class IDs for user " + std::to_string(userId) + ":");
            for (const auto& id : classIds) {
-               Logger::log(" " + std::to_string(id));
+               dalLogger.log(" " + std::to_string(id));
            }
            
            // Get note IDs for the same user.
            auto noteIds = DAL::getNoteIds(userId);
-           Logger::log("Note IDs for user " + std::to_string(userId) + ":");
+           dalLogger.log("Note IDs for user " + std::to_string(userId) + ":");
            for (const auto& id : noteIds) {
-               Logger::log(" " + std::to_string(id));
+               dalLogger.log(" " + std::to_string(id));
            }
            
            // Retrieve the file path for a specific note and perform file operations.
            if (!noteIds.empty()) {
                std::string notePath = DAL::getNoteFilePath(noteIds[0]);
-               Logger::log("File path for note " + std::to_string(noteIds[0]) + ": " + notePath);
+               dalLogger.log("File path for note " + std::to_string(noteIds[0]) + ": " + notePath);
                DAL::writeFile(notePath, "This is sample note content stored in the file system.");
                std::string content = DAL::readTxtFile(notePath);
-               Logger::log("Content of " + notePath + ": " + content);
+               dalLogger.log("Content of " + notePath + ": " + content);
            }
            
            // Write and read JSON data.
            nlohmann::json jsonData = { {"file_path", "data.json"}, {"name", "Folium"}, {"version", 1.0} };
            DAL::writeJsonFile(jsonData);
-           Logger::log("JSON data written successfully.");
+           dalLogger.log("JSON data written successfully.");
            nlohmann::json readData = DAL::readJsonFile("data.json");
-           Logger::log("Read JSON data: " + readData.dump());
+           dalLogger.log("Read JSON data: " + readData.dump());
            
            // Demonstrate authentication functions.
            if (DAL::createUser("new_user", "new_hashed_password")) {
-               Logger::log("User created successfully.");
+               dalLogger.log("User created successfully.");
            }
            std::optional<User> user = DAL::getUserByUsername("new_user");
            if (user.has_value()) {
-               Logger::log("Found user: " + user->username);
+               dalLogger.log("Found user: " + user->username);
            }
            if (DAL::updateUserPassword("new_user", "updated_hashed_password")) {
-               Logger::log("User password updated successfully.");
+               dalLogger.log("User password updated successfully.");
            }
        } catch (const std::exception& e) {
-           Logger::logErr(std::string("Exception caught: ") + e.what());
+           dalLogger.logErr(std::string("Exception caught: ") + e.what());
            return 1;
        }
        return 0;

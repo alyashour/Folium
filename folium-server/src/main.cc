@@ -45,7 +45,7 @@ int main(void)
         // create dispatcher
         ipc::FifoChannel in(GW2DP, O_RDONLY);
         ipc::FifoChannel out(DP2GW, O_WRONLY);
-        Dispatcher::dispatcher dispatcher(in, out);
+        Dispatcher::DispatcherImpl dispatcher(in, out);
 
         // tell dispatcher to create threads
         dispatcher.create_threads(10);

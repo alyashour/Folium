@@ -25,7 +25,7 @@
 #include <jwt-cpp/jwt.h>
 #include <openssl/sha.h>
 #include <nlohmann/json.hpp>
-#include "logger.h"
+#include "logger.h"  // Now contains the class-based Logger::Logger implementation.
 
 #include <iostream>
 #include <sstream>
@@ -33,9 +33,13 @@
 #include <ctime>
 #include <optional>
 #include <stdexcept>
+#include <iomanip>
 
 // Using declarations
 using json = nlohmann::json;
+
+// Create a dedicated logger instance for the authentication module.
+static Logger::Logger authLogger("auth");
 
 // JWT secret key (in production, store securely and do not hard-code)
 static const std::string jwt_secret = "operating_systems";
@@ -85,7 +89,7 @@ bool auth::check_credentials(const std::string& username, const std::string& pas
 std::string auth::login(const std::string& username) {
     auto userOpt = DAL::getUserByUsername(username);
     if (!userOpt.has_value()) {
-        Logger::logErr("Login failed: user '" + username + "' not found.");
+        authLogger.logErr("Login failed: user '" + username + "' not found.");
         return "";
     }
     int user_id = userOpt->id;
@@ -101,7 +105,7 @@ std::string auth::login(const std::string& username) {
                             .set_subject(std::to_string(user_id))
                             .sign(jwt::algorithm::hs256{jwt_secret});
 
-    Logger::logDebug("Login successful for user '" + username + "'. Token generated.");
+    authLogger.logDebug("Login successful for user '" + username + "'. Token generated.");
     return token;
 }
 
@@ -110,7 +114,7 @@ std::string auth::login(const std::string& username) {
 // In a stateless token system, logout is handled on the client side by discarding the token.
 // Here we simply log the logout request.
 void auth::logout(const std::string& username) {
-    Logger::log("Logout requested for user '" + username + "'. No state is maintained server-side.");
+    authLogger.log("Logout requested for user '" + username + "'. No state is maintained server-side.");
 }
 
 // -----------------------------------------------------------------------------
@@ -144,7 +148,7 @@ bool auth::validateToken(const std::string& token) {
         verifier.verify(decoded);
         return true;
     } catch (const std::exception& e) {
-        Logger::logErr("Token validation error: " + std::string(e.what()));
+        authLogger.logErr("Token validation error: " + std::string(e.what()));
         return false;
     }
 }
@@ -158,15 +162,15 @@ std::string auth::refreshToken(const std::string& token) {
         auto decoded = jwt::decode(token);
         std::string subject = decoded.get_subject();
 
-    auto now = std::chrono::system_clock::now();
-    auto exp = now + std::chrono::hours(24);
+        auto now = std::chrono::system_clock::now();
+        auto exp = now + std::chrono::hours(24);
 
-    std::string newToken = jwt::create()
-        .set_type("JWT")
-        .set_issued_at(now)   // pass time_point directly
-        .set_expires_at(exp)  // pass time_point directly
-        .set_subject(subject)
-        .sign(jwt::algorithm::hs256{jwt_secret});
+        std::string newToken = jwt::create()
+            .set_type("JWT")
+            .set_issued_at(now)   // pass time_point directly
+            .set_expires_at(exp)  // pass time_point directly
+            .set_subject(subject)
+            .sign(jwt::algorithm::hs256{jwt_secret});
 
         return newToken;
     } catch (const std::exception& e) {
@@ -181,31 +185,32 @@ std::string auth::refreshToken(const std::string& token) {
 bool auth::changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword) {
     auto userOpt = DAL::getUserByUsername(username);
     if (!userOpt.has_value()) {
-        Logger::logErr("Change password failed: user '" + username + "' not found.");
+        authLogger.logErr("Change password failed: user '" + username + "' not found.");
         return false;
     }
     auto user = userOpt.value();
     if (!verifyPasswordImpl(user.password_hash, oldPassword)) {
-        Logger::logErr("Change password failed: incorrect old password for user '" + username + "'.");
+        authLogger.logErr("Change password failed: incorrect old password for user '" + username + "'.");
         return false;
     }
     std::string newHashed = hashPasswordImpl(newPassword);
     if (!DAL::updateUserPassword(username, newHashed)) {
-        Logger::logErr("Change password failed: unable to update password for user '" + username + "'.");
+        authLogger.logErr("Change password failed: unable to update password for user '" + username + "'.");
         return false;
     }
-    Logger::log("Password changed successfully for user '" + username + "'.");
+    authLogger.log("Password changed successfully for user '" + username + "'.");
     return true;
 }
 
 // -----------------------------------------------------------------------------
-// isLoggedIn:
+// DEPRECATED
+// isLoggedIn: 
 // In a stateless design, there's no server-side session tracking, so we cannot determine
 // a user's logged-in state solely by username. This function returns false.
 
-bool auth::isLoggedIn(const std::string& /*username*/) {
-    return false; // @alyashour I am guessing like you said yea we don't need this function.
-}
+// bool auth::isLoggedIn(const std::string& /*username*/) {
+//     return false; // As per the stateless design, no session tracking.
+// }
 
 /*
  * Usage Example:

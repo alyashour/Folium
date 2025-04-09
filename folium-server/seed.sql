@@ -44,7 +44,7 @@ CREATE TABLE notes (
 
 -- Insert sample users
 INSERT INTO users (username, password) VALUES 
-('john_doe', 'hashed_password_here'),
+('admin', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8'),
 ('jane_doe', 'hashed_password_here'),
 ('michael_scott', 'hashed_password_here'),
 ('pam_beesly', 'hashed_password_here'),

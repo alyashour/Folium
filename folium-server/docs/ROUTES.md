@@ -65,8 +65,12 @@
 - **Inputs:** None
 - **Outputs:**
   - **Success (200 OK):**
-    - `classes` (array): An array of class IDs.
-    - array of objects ( classID, , owner, ownerID, ownersContact)
+    - `classes` (array): An array of class objects, each containing:
+      - `classId` (string): The unique identifier of the class.
+      - `name` (string): The name of the class.
+      - `owner` (string): The username of the class owner.
+      - `ownerId` (string): The user ID of the class owner.
+      - `ownerContact` (string, optional): Contact information for the owner.
   - **Error (500 Internal Server Error):**
     - `error` (string): Description of the server error.
 
@@ -114,7 +118,7 @@
     - `error` (string): User doesn't have permission to update this class.
   - **Error (404 Not Found):**
     - `error` (string): Class not found.
- 
+
 ### DELETE /api/me/classes/{classId}
 - **Description:** Removes a class that the authenticated user owns or removes the user from an enrolled class.
 - **Inputs:** None (uses authentication token and class ID from URL)
@@ -217,33 +221,33 @@
 ## Notes Routes
 
 ### GET /api/me/classes/{classId}/bigNote
-- **Description:** Gets a list of notes for a specific class.
+- **Description:** Gets the consolidated big note for a specific class.
 - **Inputs:** None (uses authentication token and class ID from URL)
 - **Outputs:**
-this will be one bigNote
   - **Success (200 OK):**
-    - `notes` (array): An array of note objects. 
-      - Each note object contains:
-        - `id` (string): The note ID.
-        - `title` (string): The note title.
-        - `createdAt` (string): The creation timestamp.
-        - `updatedAt` (string): The last update timestamp.
+    - `bigNote` (object): The consolidated big note object containing:
+      - `content` (string): The content of the big note.
+      - `title` (string): The title of the big note.
+      - `lastUpdated` (string): Timestamp of last update.
+      - `contributors` (array): List of users who contributed to this note.
+      - `sections` (array): Structured sections of the note.
   - **Error (401 Unauthorized):**
     - `error` (string): Authentication error message.
   - **Error (403 Forbidden):**
     - `error` (string): User doesn't have permission to access this class.
   - **Error (404 Not Found):**
-    - `error` (string): Class not found.
+    - `error` (string): Class not found or big note doesn't exist yet.
 
 ### POST /api/me/classes/{classId}/upload-note
-- **Description:** Uploads a new note to a specific class.
+- **Description:** Uploads a new note to be integrated into the class's big note.
 - **Inputs:**
   - `noteFile` (multipart/form-data, required): The note file to upload.
   - `title` (string, optional): The title of the note.
 - **Outputs:**
   - **Success (201 Created):**
     - `message` (string): Confirmation message.
-    - `noteId` (string): The ID of the newly created note.
+    - `updated` (boolean): Whether the big note was updated.
+    - `mergeConflicts` (array, optional): Any conflicts that occurred during merging.
   - **Error (400 Bad Request):**
     - `error` (string): Description of the validation error.
   - **Error (401 Unauthorized):**
@@ -253,51 +257,54 @@ this will be one bigNote
   - **Error (404 Not Found):**
     - `error` (string): Class not found.
 
-<!-- ### GET /api/me/classes/{classId}/notes/{noteId}
-- **Description:** Gets the content and metadata of a specific note.
-- **Inputs:** None (uses authentication token, class ID, and note ID from URL)
-- **Outputs:**
-  - **Success (200 OK):**
-    - `id` (string): The note ID.
-    - `title` (string): The note title.
-    - `content` (string): The content of the note.
-    - `structuredContent` (object): The structured representation of the note.
-    - `createdAt` (string): The creation timestamp.
-    - `updatedAt` (string): The last update timestamp.
-  - **Error (401 Unauthorized):**
-    - `error` (string): Authentication error message.
-  - **Error (403 Forbidden):**
-    - `error` (string): User doesn't have permission to access this note.
-  - **Error (404 Not Found):**
-    - `error` (string): Note or class not found. -->
-
-edit a specfic note 
 ### PUT /api/me/classes/{classId}/bigNote/edit-note
-- **Description:** Updates/edits an existing note.
+- **Description:** Updates/edits the big note directly.
 - **Inputs:**
-  - `title` (string, optional): The updated title of the note.
-  - `content` (json object): The updated content of the note.
+  - `title` (string, optional): The updated title of the big note.
+  - `content` (object): The updated content of the big note containing:
+    - `sections` (array, optional): Updated sections.
+    - `text` (string, optional): Raw text content.
 - **Outputs:**
   - **Success (200 OK):**
     - `message` (string): Confirmation of successful update.
+    - `lastUpdated` (string): New timestamp of the update.
   - **Error (400 Bad Request):**
     - `error` (string): Description of the validation error.
   - **Error (401 Unauthorized):**
     - `error` (string): Authentication error message.
   - **Error (403 Forbidden):**
-    - `error` (string): User doesn't have permission to edit this note.
+    - `error` (string): User doesn't have permission to edit the big note.
   - **Error (404 Not Found):**
-    - `error` (string): Note or class not found.
+    - `error` (string): Class not found or big note doesn't exist yet.
 
-### DELETE /api/me/classes/{classId}/notes/{noteId}
-- **Description:** Deletes a note.
-- **Inputs:** None (uses authentication token, class ID, and note ID from URL)
+### GET /api/me/classes/{classId}/bigNote/history
+- **Description:** Gets the edit history of the big note.
+- **Inputs:** None (uses authentication token and class ID from URL)
 - **Outputs:**
   - **Success (200 OK):**
-    - `message` (string): Confirmation of successful deletion.
+    - `history` (array): An array of edit events containing:
+      - `timestamp` (string): When the edit occurred.
+      - `userId` (string): Who made the edit.
+      - `description` (string): Brief description of changes.
   - **Error (401 Unauthorized):**
     - `error` (string): Authentication error message.
   - **Error (403 Forbidden):**
-    - `error` (string): User doesn't have permission to delete this note.
+    - `error` (string): User doesn't have permission to view this history.
   - **Error (404 Not Found):**
-    - `error` (string): Note or class not found.
+    - `error` (string): Class not found or big note doesn't exist yet.
+
+### GET /api/me/classes/{classId}/bigNote/export
+- **Description:** Exports the big note in a specified format.
+- **Inputs:** 
+  - `format` (string, optional): The format to export (PDF, Markdown, etc.). Defaults to PDF.
+- **Outputs:**
+  - **Success (200 OK):**
+    - File download response with appropriate Content-Type header.
+  - **Error (400 Bad Request):**
+    - `error` (string): Invalid export format.
+  - **Error (401 Unauthorized):**
+    - `error` (string): Authentication error message.
+  - **Error (403 Forbidden):**
+    - `error` (string): User doesn't have permission to export this note.
+  - **Error (404 Not Found):**
+    - `error` (string): Class not found or big note doesn't exist yet.

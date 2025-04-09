@@ -1,5 +1,49 @@
 #include <string>
 #include <iostream>
+#include <ctime> 
+
+#include "logger.h"
+
+std::string static getTimestamp() {
+   // get time
+   time_t timestamp;
+   time(&timestamp);
+
+   // convert to string
+   char timeString[std::size("Thh:mm:ssZ")];
+   std::strftime(
+      std::data(timeString),
+      std::size(timeString),
+      "%T",
+      std::localtime(&timestamp)
+   );
+
+   std::string s(timeString);
+
+   return s;
+}
+
+std::string static getHeader(const std::string& s) {
+   return "[" + s + " | " + getTimestamp() + "] ";
+}
+
+void Logger::log(std::string s) {
+   // add a period if it doesn't end with one
+   if (!s.ends_with('.') && !s.ends_with('!')) {
+      s += ".";
+   }
+
+   std::cout << getHeader("LOG") << s << std::endl;
+}
+
+void Logger::logErr(std::string s) {
+   // add a period if it doesn't end with one
+   if (!s.ends_with('.') && !s.ends_with('!')) {
+      s += ".";
+   }
+
+   std::cout << getHeader("ERR") << s << std::endl;
+}
 #include <ctime>
 #include <sstream>
 #include "logger.h"  // Make sure this header declares the LoggingLevel enum.

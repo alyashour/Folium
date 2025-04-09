@@ -16,6 +16,7 @@ using json = nlohmann::json;
 enum F_TaskType {
     PING,
     CREATE_NOTE,
+    REGISTER,
     EDIT_NOTE,
     SING_IN,
     SING_UP,

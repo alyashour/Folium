@@ -1,6 +1,6 @@
 <!-- ledger/src/routes/+layout.svelte -->
 <script lang="ts">
-  import { PUBLIC_LEDGER_PING_URL } from '$env/static/public';
+  import { PUBLIC_API_BASE_URL } from '$env/static/public';
   import FetchOverride from '$lib/components/FetchOverride.svelte';
   import Footer from '$lib/components/Footer.svelte';
   import Navbar from '$lib/components/Navbar.svelte';
@@ -40,13 +40,13 @@
   }
 
   /**
-   * retry pings the server using PUBLIC_LEDGER_PING_URL. If the ping is successful,
+   * retry pings the server using PUBLIC_API_BASE_URL. If the ping is successful,
    * it clears the connection error.
    */
   async function retry() {
     connectionError.set(false);
     try {
-      const res = await fetch(PUBLIC_LEDGER_PING_URL);
+      const res = await fetch(PUBLIC_API_BASE_URL + "/ping");
       if (!res.ok) {
         connectionError.set(true);
       } else {

@@ -14,8 +14,8 @@ std::string static getTimestamp() {
    std::strftime(
       std::data(timeString),
       std::size(timeString),
-      "%FT%TZ",
-      std::gmtime(&timestamp)
+      "%T",
+      std::localtime(&timestamp)
    );
 
    std::string s(timeString);
@@ -28,5 +28,10 @@ std::string static getHeader() {
 }
 
 void Logger::log(std::string s) {
+   // add a period if it doesn't end with one
+   if (!s.ends_with('.') && !s.ends_with('!')) {
+      s += ".";
+   }
+
    std::cout << getHeader() << s << std::endl;
 }

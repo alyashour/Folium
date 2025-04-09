@@ -69,8 +69,14 @@ FetchContent_Declare(
   GIT_TAG        v3.11.3
 )
 
+fetchcontent_declare(jwt-cpp 
+    GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
+    GIT_TAG e71e0c2d584baff06925bbb3aad683f677e4d498
+)
+set(JWT_BUILD_EXAMPLES OFF CACHE BOOL "disable building examples" FORCE)
+
 # Make the libraries available
-FetchContent_MakeAvailable(googletest httplib json)
+FetchContent_MakeAvailable(googletest httplib json jwt-cpp)
 
 ## SET UP EXECUTABLE ##
 
@@ -105,9 +111,12 @@ if(NOT MYSQLCPPCONN_LIB)
 endif()
 
 # Link dependencies
-target_link_libraries(folium-core PUBLIC nlohmann_json::nlohmann_json)
-target_link_libraries(folium-core PUBLIC httplib)
-target_link_libraries(folium-core PUBLIC ${MYSQLCPPCONN_LIB})
+target_link_libraries(folium-core PUBLIC 
+    nlohmann_json::nlohmann_json
+    httplib
+    ${MYSQLCPPCONN_LIB}
+    jwt-cpp
+)
 
 # Create the server executable
 add_executable(folium-server src/main.cc)
@@ -119,12 +128,26 @@ add_dependencies(folium-server version-info)
 
 ## TESTING ##
 enable_testing()
-add_executable(tests
-    tests/test_logger.cc
-    tests/test_core.cc
-)
-target_link_libraries(tests PRIVATE folium-core gtest gtest_main)
-add_test(NAME AllTests COMMAND tests)
+
+# Auth (NOT YET IMPLEMENTED)
+# add_executable(auth_test tests/test_auth.cc)
+# target_link_libraries(auth_test PRIVATE folium-core gtest gtest_main)
+# add_test(NAME auth_test COMMAND auth_test)
+
+# Core
+add_executable(core_test tests/test_core.cc)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME core_test COMMAND log_test)
+
+# Gateway
+add_executable(gateway_test tests/test_gateway.cc)
+target_link_libraries(gateway_test PRIVATE folium-core gtest gtest_main httplib)
+add_test(NAME gateway_test COMMAND gateway_test)
+
+# Logging
+add_executable(log_test tests/test_logger.cc)
+target_link_libraries(log_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME log_test COMMAND log_test)
 
 # Installation rules
 install(TARGETS folium-server DESTINATION bin)

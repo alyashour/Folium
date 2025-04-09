@@ -16,11 +16,20 @@
 #ifndef FOLSERV_DATA_ACCESS_LAYER_H_
 #define FOLSERV_DATA_ACCESS_LAYER_H_
 
-#include <vector>
 #include <string>
+#include <vector>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 namespace DAL {
+
+    // A simple User struct for demonstration.
+    struct User {
+        int id;
+        std::string username;
+        std::string password_hash;
+    };
+
     //////////////
     /* DATABASE */
     //////////////
@@ -112,6 +121,31 @@ namespace DAL {
      */
     bool query_returns_results(const std::string& query);
     
+
+    // ===== AUTH-RELATED FUNCTIONS ===== //
+
+    /**
+     * @brief Retrieves a user by username.
+     * @param username The username to search for.
+     * @return An optional User object; if not found, std::nullopt is returned.
+     */
+    std::optional<User> getUserByUsername(const std::string& username);
+
+    /**
+     * @brief Creates a new user.
+     * @param username The user's username.
+     * @param hashedPassword The user's hashed password.
+     * @return true if the user was created successfully.
+     */
+    bool createUser(const std::string& username, const std::string& hashedPassword);
+
+    /**
+     * @brief Updates a user's password.
+     * @param username The user's username.
+     * @param newHashedPassword The new hashed password.
+     * @return true if the password was successfully updated.
+     */
+    bool updateUserPassword(const std::string& username, const std::string& newHashedPassword);
 }
 
 #endif // FOLSERV_DATA_ACCESS_LAYER_H_

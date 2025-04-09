@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env.VITE_PUBLIC_API_BASE_URL;
+import { PUBLIC_API_BASE_URL } from "$env/static/public";
+
+const API_BASE = PUBLIC_API_BASE_URL;
+
 
 /**
  * Helper function to process API responses

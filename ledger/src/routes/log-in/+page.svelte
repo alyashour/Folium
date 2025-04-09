@@ -23,27 +23,27 @@
   let password = '';
 
   async function handleLogin() {
-  console.log('Attempting to log in with:', username, password);
-  try {
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
+    console.log('Attempting to log in with:', username, password);
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
 
-    if (!res.ok) {
-      if (res.status === 401) {
-        console.log("Invalid credentials");
-        alert("Invalid username or password");
-      } else if (res.status >= 500) {
-        console.log("Server error occurred");
-        showConnectionError();
-      } else {
-        console.log(`Server responded with status ${res.status}`);
-        alert("Login failed with status " + res.status);
+      if (!res.ok) {
+        if (res.status === 401) {
+          console.log("Invalid credentials");
+          alert("Invalid username or password");
+        } else if (res.status >= 500) {
+          console.log("Server error occurred");
+          showConnectionError();
+        } else {
+          console.log(`Server responded with status ${res.status}`);
+          alert("Login failed with status " + res.status);
+        }
+        return;
       }
-      return;
-    }
 
     const data = await res.json();
     console.log("Login successful:", data);

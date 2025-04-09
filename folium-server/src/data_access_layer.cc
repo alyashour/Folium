@@ -2,12 +2,11 @@
  * @file data_access_layer.cc
  * @brief Implementation of the Data Access Layer (DAL) for the Folium server.
  *
- * This file defines functions to interact with the MySQL database and perform 
- * file I/O for plain text and JSON files. The database connection parameters 
- * are read from a local "dbConfig.json" file.
+ * This file implements functions to interact with a MySQL database and perform file I/O
+ * (both plain text and JSON). The database connection parameters are read from the
+ * local "dbConfig.json" file (see expected structure below).
  *
- * The expected structure for dbConfig.json is:
- *
+ * Expected dbConfig.json:
  * {
  *   "mysql_host": "127.0.0.1",
  *   "mysql_port": 3306,
@@ -16,133 +15,177 @@
  *   "mysql_database": "folium"
  * }
  *
- * Note: Since this code uses MySQL's C API (or MySQL Connector/C++), you must
- * link against the MySQL library. If you wish to avoid manual linking, CMake
- * (as in your CMakeLists.txt) will automatically find and link the required
- * library using find_library()/target_link_libraries(), but an external library
- * is still required at build time.
+ * All functions use robust error handling:
+ *   - Errors are logged via Logger.
+ *   - Exceptions are thrown to ensure the caller is informed.
+ *   - No function fails silently.
+ *
+ * File I/O operations now use per-file mutexes to ensure that each open file is independently
+ * protected, enabling concurrent operations on different files.
  */
 
 #include "data_access_layer.h"
+#include "logger.h"
 #include <mysql/mysql.h>
 #include <nlohmann/json.hpp>
-#include <iostream>
 #include <fstream>
 #include <sstream>
+#include <mutex>
+#include <stdexcept>
 #include <vector>
 #include <string>
+#include <optional>
+#include <unordered_map>
+#include <memory>
+
+//----------------------------------------------------------------------
+// Global per-file mutex management
+//----------------------------------------------------------------------
+
+namespace {
+    // Global mutex protects access to the file mutex map.
+    std::mutex globalFileMutexMapLock;
+    // Map each file path to its dedicated mutex.
+    std::unordered_map<std::string, std::shared_ptr<std::mutex>> fileMutexMap;
+
+    /**
+     * @brief Retrieve a mutex for the given file path.
+     *
+     * This function returns the shared pointer to the mutex for the file.
+     * If no mutex exists for the file, one is created.
+     *
+     * @param filePath The file path.
+     * @return A shared_ptr to the mutex guarding the file.
+     */
+    std::shared_ptr<std::mutex> getFileMutex(const std::string& filePath) {
+        std::lock_guard<std::mutex> lock(globalFileMutexMapLock);
+        auto it = fileMutexMap.find(filePath);
+        if (it == fileMutexMap.end()) {
+            auto mtx = std::make_shared<std::mutex>();
+            fileMutexMap[filePath] = mtx;
+            return mtx;
+        }
+        return it->second;
+    }
+}
+
+//----------------------------------------------------------------------
+// Database Configuration and Connection
+//----------------------------------------------------------------------
 
 namespace DAL {
 
-/**
- * @brief A simple struct to hold our DB connection parameters.
- */
-struct DBConfig {
-    std::string host;
-    unsigned int port;
-    std::string user;
-    std::string password;
-    std::string database;
-};
+    /**
+     * @brief A simple struct to hold DB connection parameters.
+     */
+    struct DBConfig {
+        std::string host;
+        unsigned int port;
+        std::string user;
+        std::string password;
+        std::string database;
+    };
 
-/**
- * @brief Retrieve database configuration from dbConfig.json.
- *
- * This function loads the connection parameters from the configuration file.
- * It uses static variables to ensure the configuration is loaded only once.
- *
- * @return A DBConfig struct containing the loaded configuration.
- */
-static DBConfig getDbConfig() {
-    static bool loaded = false;
-    static DBConfig config;
-
-    // Load configuration only once, then reuse it.
-    if (!loaded) {
-        try {
+    /**
+     * @brief Retrieve database configuration from dbConfig.json.
+     *
+     * Loads the connection parameters using static storage so the file is read only once.
+     *
+     * @return A DBConfig struct containing the configuration.
+     */
+    static DBConfig getDbConfig() {
+        static bool loaded = false;
+        static DBConfig config;
+        if (!loaded) {
             std::ifstream configFile("dbConfig.json");
             if (!configFile.is_open()) {
-                throw std::runtime_error("Unable to open dbConfig.json. Please check the file path.");
+                Logger::logErr("getDbConfig: Unable to open dbConfig.json. Check file path.");
+                throw std::runtime_error("getDbConfig: Unable to open dbConfig.json.");
             }
             nlohmann::json j;
-            configFile >> j;
-
+            try {
+                configFile >> j;
+            } catch (const std::exception &e) {
+                Logger::logErr("getDbConfig: JSON parse error: " + std::string(e.what()));
+                throw;
+            }
             config.host     = j.value("mysql_host", "127.0.0.1");
             config.port     = j.value("mysql_port", 3306);
             config.user     = j.value("mysql_user", "root");
             config.password = j.value("mysql_password", "");
             config.database = j.value("mysql_database", "folium");
-
             loaded = true;
-        } 
-        catch (std::exception &e) {
-            std::cerr << "[ERROR] Failed to load dbConfig.json: " << e.what() << std::endl;
-            // Optionally, exit or set default values.
-            throw;
         }
-    }
-    return config;
-}
-
-/**
- * @brief Create and return a MySQL connection using the parameters from dbConfig.json.
- *
- * @return A MYSQL* connection object or nullptr if the connection fails.
- */
-static MYSQL* create_connection() {
-    // Load the DB config (host, port, user, password, database)
-    DBConfig cfg;
-    try {
-        cfg = getDbConfig();
-    } catch (...) {
-        // If there's an error reading the config, we can't continue
-        return nullptr;
+        return config;
     }
 
-    MYSQL *conn = mysql_init(nullptr);
-    if (!conn) {
-        std::cerr << "[ERROR] mysql_init() failed.\n";
-        return nullptr;
+    /**
+     * @brief Create and return a MySQL connection.
+     *
+     * Uses connection parameters from dbConfig.json. If the connection fails,
+     * an exception is thrown.
+     *
+     * @return MYSQL* pointer to the MySQL connection.
+     */
+    static MYSQL* createConnection() {
+        DBConfig cfg;
+        try {
+            cfg = getDbConfig();
+        } catch (...) {
+            throw std::runtime_error("createConnection: Failed to load database configuration.");
+        }
+        MYSQL *conn = mysql_init(nullptr);
+        if (!conn) {
+            Logger::logErr("createConnection: mysql_init() failed.");
+            throw std::runtime_error("createConnection: mysql_init() failed.");
+        }
+        if (!mysql_real_connect(
+                conn,
+                cfg.host.c_str(),
+                cfg.user.c_str(),
+                cfg.password.c_str(),
+                cfg.database.c_str(),
+                cfg.port,
+                nullptr,
+                0))
+        {
+            std::string errMsg = mysql_error(conn);
+            Logger::logErr("createConnection: mysql_real_connect() failed: " + errMsg);
+            mysql_close(conn);
+            throw std::runtime_error("createConnection: mysql_real_connect() failed: " + errMsg);
+        }
+        return conn;
     }
 
-    // Connect using the loaded config
-    if (!mysql_real_connect(
-            conn,
-            cfg.host.c_str(),
-            cfg.user.c_str(),
-            cfg.password.c_str(),
-            cfg.database.c_str(),
-            cfg.port,
-            nullptr,
-            0
-        )) 
-    {
-        std::cerr << "[ERROR] mysql_real_connect() failed: " 
-                  << mysql_error(conn) << "\n";
-        mysql_close(conn);
-        return nullptr;
-    }
-    return conn;
-}
+    //----------------------------------------------------------------------    
+    // SQL Query Functions
+    //----------------------------------------------------------------------
 
-/**
- * @brief Retrieve the list of database tables.
- * @return A vector of strings containing the names of all tables in the database.
- */
-std::vector<std::string> get_tables() {
-    std::vector<std::string> tables;
-    MYSQL* conn = create_connection();
-    if (!conn) return tables;
-
-    const char* query = "SHOW TABLES;";
-    if (mysql_query(conn, query)) {
-        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
-        mysql_close(conn);
-        return tables;
-    }
-
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (result) {
+    /**
+     * @brief Retrieve the list of database tables.
+     *
+     * Executes "SHOW TABLES" on the MySQL server. If an error occurs,
+     * an exception is thrown.
+     *
+     * @return A vector of strings containing table names.
+     */
+    std::vector<std::string> getTables() {
+        MYSQL* conn = createConnection();
+        const char* query = "SHOW TABLES;";
+        if (mysql_query(conn, query)) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getTables: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getTables: Query failed: " + err);
+        }
+        MYSQL_RES* result = mysql_store_result(conn);
+        if (!result) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getTables: Failed to retrieve result: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getTables: Failed to retrieve result: " + err);
+        }
+        std::vector<std::string> tables;
         MYSQL_ROW row;
         while ((row = mysql_fetch_row(result))) {
             if (row[0] != nullptr) {
@@ -150,232 +193,447 @@ std::vector<std::string> get_tables() {
             }
         }
         mysql_free_result(result);
-    }
-    mysql_close(conn);
-    return tables;
-}
-
-/**
- * @brief Retrieve the class IDs associated with a specific user.
- *
- * This function queries the user_classes table and prints the class IDs.
- *
- * @param user_id The ID of the user whose class IDs are to be retrieved.
- *
- * For demonstration, this function prints the class IDs to standard output.
- */
-void get_class_ids(const unsigned int user_id) {
-    MYSQL* conn = create_connection();
-    if (!conn) return;
-
-    std::stringstream ss;
-    ss << "SELECT class_id FROM user_classes WHERE user_id = " << user_id << ";";
-    std::string query = ss.str();
-
-    if (mysql_query(conn, query.c_str())) {
-        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
         mysql_close(conn);
-        return;
+        return tables;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (result) {
+    /**
+     * @brief Retrieve the class IDs associated with a specific user.
+     *
+     * Executes a SQL query against the "user_classes" table.
+     *
+     * @param user_id The ID of the user.
+     * @return A vector of integer class IDs.
+     */
+    std::vector<int> getClassIds(const unsigned int user_id) {
+        if (user_id == 0) {
+            Logger::logErr("getClassIds: Invalid user ID (0) provided.");
+            throw std::invalid_argument("getClassIds: user_id must be non-zero.");
+        }
+        MYSQL* conn = createConnection();
+        std::stringstream ss;
+        ss << "SELECT class_id FROM user_classes WHERE user_id = " << user_id << ";";
+        std::string query = ss.str();
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getClassIds: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getClassIds: Query failed: " + err);
+        }
+        MYSQL_RES* result = mysql_store_result(conn);
+        if (!result) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getClassIds: Failed to retrieve result: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getClassIds: Failed to retrieve result: " + err);
+        }
+        std::vector<int> classIds;
         MYSQL_ROW row;
-        std::cout << "Class IDs for user " << user_id << ": ";
         while ((row = mysql_fetch_row(result))) {
             if (row[0] != nullptr) {
-                std::cout << row[0] << " ";
+                int id = std::stoi(row[0]);
+                classIds.push_back(id);
             }
         }
-        std::cout << std::endl;
         mysql_free_result(result);
-    }
-    mysql_close(conn);
-}
-
-/**
- * @brief Retrieve the note IDs associated with a specific user.
- *
- * This function joins the notes and user_classes tables to display the note IDs.
- *
- * @param user_id The ID of the user whose note IDs are to be retrieved.
- *
- * This function performs a join between the notes and user_classes tables
- * because the note is keyed to the class, and user_classes links the user to the class.
- */
-void get_note_ids(const unsigned int user_id) {
-    MYSQL* conn = create_connection();
-    if (!conn) return;
-
-    std::stringstream ss;
-    ss << "SELECT n.id "
-       << "FROM notes n "
-       << "INNER JOIN user_classes uc ON n.class_id = uc.class_id "
-       << "WHERE uc.user_id = " << user_id << ";";
-    std::string query = ss.str();
-
-    if (mysql_query(conn, query.c_str())) {
-        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
         mysql_close(conn);
-        return;
+        Logger::logDebug("getClassIds: Retrieved class ids for user " + std::to_string(user_id));
+        return classIds;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (result) {
+    /**
+     * @brief Retrieve the note IDs associated with a specific user.
+     *
+     * Executes a join query between "notes" and "user_classes" to obtain note IDs.
+     *
+     * @param user_id The ID of the user.
+     * @return A vector of integer note IDs.
+     */
+    std::vector<int> getNoteIds(const unsigned int user_id) {
+        if (user_id == 0) {
+            Logger::logErr("getNoteIds: Invalid user ID (0) provided.");
+            throw std::invalid_argument("getNoteIds: user_id must be non-zero.");
+        }
+        MYSQL* conn = createConnection();
+        std::stringstream ss;
+        ss << "SELECT n.id FROM notes n INNER JOIN user_classes uc ON n.class_id = uc.class_id "
+           << "WHERE uc.user_id = " << user_id << ";";
+        std::string query = ss.str();
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getNoteIds: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getNoteIds: Query failed: " + err);
+        }
+        MYSQL_RES* result = mysql_store_result(conn);
+        if (!result) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getNoteIds: Failed to retrieve result: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getNoteIds: Failed to retrieve result: " + err);
+        }
+        std::vector<int> noteIds;
         MYSQL_ROW row;
-        std::cout << "Note IDs for user " << user_id << ": ";
         while ((row = mysql_fetch_row(result))) {
             if (row[0] != nullptr) {
-                std::cout << row[0] << " ";
+                int id = std::stoi(row[0]);
+                noteIds.push_back(id);
             }
         }
-        std::cout << std::endl;
         mysql_free_result(result);
-    }
-    mysql_close(conn);
-}
-
-/**
- * @brief Retrieve the file path for a specific note.
- * @param note_id The ID of the note whose file path is to be retrieved.
- * @return A string containing the file path of the note.
- */
-std::string get_note_file_path(const unsigned int note_id) {
-    std::string file_path;
-    MYSQL* conn = create_connection();
-    if (!conn) return file_path;
-
-    std::stringstream ss;
-    ss << "SELECT file_path FROM notes WHERE id = " << note_id << ";";
-    std::string query = ss.str();
-
-    if (mysql_query(conn, query.c_str())) {
-        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
         mysql_close(conn);
-        return file_path;
+        Logger::logDebug("getNoteIds: Retrieved note ids for user " + std::to_string(user_id));
+        return noteIds;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (result) {
+    /**
+     * @brief Retrieve the file path for a specific note.
+     *
+     * Executes a query against the "notes" table to obtain the file path.
+     *
+     * @param note_id The ID of the note.
+     * @return A string with the file path.
+     */
+    std::string getNoteFilePath(const unsigned int note_id) {
+        if (note_id == 0) {
+            Logger::logErr("getNoteFilePath: Invalid note id (0) provided.");
+            throw std::invalid_argument("getNoteFilePath: note_id must be non-zero.");
+        }
+        MYSQL* conn = createConnection();
+        std::stringstream ss;
+        ss << "SELECT file_path FROM notes WHERE id = " << note_id << ";";
+        std::string query = ss.str();
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getNoteFilePath: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getNoteFilePath: Query failed: " + err);
+        }
+        MYSQL_RES* result = mysql_store_result(conn);
+        if (!result) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getNoteFilePath: Failed to retrieve result: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getNoteFilePath: Failed to retrieve result: " + err);
+        }
+        std::string filePath;
         MYSQL_ROW row = mysql_fetch_row(result);
         if (row && row[0]) {
-            file_path = row[0];
+            filePath = row[0];
+        } else {
+            Logger::logErr("getNoteFilePath: No file path found for note id " + std::to_string(note_id));
+            mysql_free_result(result);
+            mysql_close(conn);
+            throw std::runtime_error("getNoteFilePath: File path not found for note id " + std::to_string(note_id));
         }
         mysql_free_result(result);
+        mysql_close(conn);
+        Logger::logDebug("getNoteFilePath: Retrieved file path for note " + std::to_string(note_id));
+        return filePath;
     }
-    mysql_close(conn);
-    return file_path;
-}
 
-/**
- * @brief Read the contents of a file.
- * @param file_path The path to the file to be read.
- * @return A string containing the contents of the file.
- */
-std::string read_file(const std::string& file_path) {
-    std::ifstream in(file_path);
-    if (!in) {
-        std::cerr << "[ERROR] Cannot open file for reading: " << file_path << std::endl;
-        return "";
+    //----------------------------------------------------------------------    
+    // File and JSON I/O Functions (with per-file mutexes)
+    //----------------------------------------------------------------------
+
+    /**
+     * @brief Read the contents of a file.
+     *
+     * Locks the mutex dedicated to the given file path.
+     *
+     * @param file_path The path of the file.
+     * @return A string containing the file's content.
+     */
+    std::string readFile(const std::string& file_path) {
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
+        std::ifstream in(file_path);
+        if (!in.is_open()) {
+            Logger::logErr("readFile: Cannot open file for reading: " + file_path);
+            throw std::runtime_error("readFile: Cannot open file: " + file_path);
+        }
+        std::ostringstream ss;
+        ss << in.rdbuf();
+        Logger::logDebug("readFile: Successfully read file: " + file_path);
+        return ss.str();
     }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
-}
 
-/**
- * @brief Write data to a file.
- * @param file_path The path to the file to be written.
- * @param data The data to write to the file.
- * @return True if the operation was successful, false otherwise.
- */
-bool write_file(const std::string& file_path, const std::string& data) {
-    std::ofstream out(file_path);
-    if (!out) {
-        std::cerr << "[ERROR] Cannot open file for writing: " << file_path << std::endl;
-        return false;
+    /**
+     * @brief Write data to a file.
+     *
+     * Locks the mutex dedicated to the given file path.
+     * On failure, an exception is thrown.
+     *
+     * @param file_path The file path to write.
+     * @param data The data to write.
+     * @return True if writing succeeded.
+     */
+    bool writeFile(const std::string& file_path, const std::string& data) {
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
+        std::ofstream out(file_path);
+        if (!out.is_open()) {
+            Logger::logErr("writeFile: Cannot open file for writing: " + file_path);
+            throw std::runtime_error("writeFile: Cannot open file: " + file_path);
+        }
+        out << data;
+        if (!out.good()) {
+            Logger::logErr("writeFile: Error occurred while writing to file: " + file_path);
+            throw std::runtime_error("writeFile: Failed to write file: " + file_path);
+        }
+        Logger::logDebug("writeFile: Successfully wrote file: " + file_path);
+        return true;
     }
-    out << data;
-    return true;
-}
 
-/**
- * @brief Read the contents of a plain text file.
- * @param file_path The path to the text file to be read.
- * @return A string containing the contents of the text file.
- */
-std::string read_txt_file(const std::string& file_path) {
-    // This function can simply call read_file (since it's plain text).
-    return read_file(file_path);
-}
+    /**
+     * @brief Read the contents of a plain text file.
+     *
+     * Simply calls readFile.
+     *
+     * @param file_path The text file path.
+     * @return The file contents as a string.
+     */
+    std::string readTxtFile(const std::string& file_path) {
+        return readFile(file_path);
+    }
 
-/**
- * @brief Read the contents of a JSON file.
- * @param file_path The path to the JSON file to be read.
- * @return A JSON object containing the parsed data from the file.
- */
-nlohmann::json read_json_file(const std::string& file_path) {
-    nlohmann::json j;
-    std::ifstream in(file_path);
-    if (!in) {
-        std::cerr << "[ERROR] Cannot open JSON file for reading: " << file_path << std::endl;
+    /**
+     * @brief Read and parse a JSON file.
+     *
+     * Locks the per-file mutex and parses the JSON file.
+     *
+     * @param file_path The JSON file path.
+     * @return A nlohmann::json object with the parsed content.
+     */
+    nlohmann::json readJsonFile(const std::string& file_path) {
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
+        std::ifstream in(file_path);
+        if (!in.is_open()) {
+            Logger::logErr("readJsonFile: Cannot open JSON file for reading: " + file_path);
+            throw std::runtime_error("readJsonFile: Cannot open file: " + file_path);
+        }
+        nlohmann::json j;
+        try {
+            in >> j;
+        } catch (const std::exception& e) {
+            Logger::logErr("readJsonFile: Error parsing JSON from " + file_path + ": " + e.what());
+            throw std::runtime_error("readJsonFile: Failed to parse JSON file: " + file_path);
+        }
+        Logger::logDebug("readJsonFile: Successfully read JSON file: " + file_path);
         return j;
     }
-    try {
-        in >> j;
-    } catch (const std::exception& e) {
-        std::cerr << "[ERROR] Error parsing JSON: " << e.what() << std::endl;
-    }
-    return j;
-}
 
-/**
- * @brief Write data to a JSON file.
- * @param data The JSON object to write to the file. We look for "file_path" 
- *             within the JSON itself to decide where to save it.
- */
-void write_json_file(const nlohmann::json& data) {
-    if (!data.contains("file_path")) {
-        std::cerr << "[ERROR] JSON data does not contain a 'file_path' field." << std::endl;
-        return;
+    /**
+     * @brief Write a nlohmann::json object to a file.
+     *
+     * The JSON data must contain a "file_path" field. Locks the corresponding mutex.
+     * Throws an exception on error.
+     *
+     * @param data The JSON object to write.
+     */
+    void writeJsonFile(const nlohmann::json& data) {
+        if (!data.contains("file_path")) {
+            Logger::logErr("writeJsonFile: JSON data does not contain a 'file_path' field.");
+            throw std::runtime_error("writeJsonFile: Missing 'file_path' field in JSON data.");
+        }
+        std::string file_path = data["file_path"].get<std::string>();
+        auto fileMtx = getFileMutex(file_path);
+        std::lock_guard<std::mutex> lock(*fileMtx);
+        std::ofstream out(file_path);
+        if (!out.is_open()) {
+            Logger::logErr("writeJsonFile: Cannot open file for writing JSON: " + file_path);
+            throw std::runtime_error("writeJsonFile: Cannot open JSON file: " + file_path);
+        }
+        try {
+            out << data.dump(4);
+        } catch (const std::exception& e) {
+            Logger::logErr("writeJsonFile: Error writing JSON data to " + file_path + ": " + e.what());
+            throw std::runtime_error("writeJsonFile: Failed to write JSON file: " + file_path);
+        }
+        if (!out.good()) {
+            Logger::logErr("writeJsonFile: I/O error occurred while writing JSON file: " + file_path);
+            throw std::runtime_error("writeJsonFile: I/O error writing JSON file: " + file_path);
+        }
+        Logger::logDebug("writeJsonFile: Successfully wrote JSON file: " + file_path);
     }
-    std::string file_path = data["file_path"].get<std::string>();
-    std::ofstream out(file_path);
-    if (!out) {
-        std::cerr << "[ERROR] Cannot open file for writing JSON: " << file_path << std::endl;
-        return;
+
+    //----------------------------------------------------------------------    
+    // Authentication Functions
+    //----------------------------------------------------------------------
+
+    /**
+     * @brief Retrieve a user by username.
+     *
+     * Executes a query on the "users" table. Returns std::nullopt if not found.
+     *
+     * @param username The username to search for.
+     * @return An optional User object.
+     */
+    std::optional<User> getUserByUsername(const std::string& username) {
+        if (username.empty()) {
+            Logger::logWarn("getUserByUsername: Empty username provided.");
+            return std::nullopt;
+        }
+        MYSQL* conn = createConnection();
+        // Note: For simplicity, building the query directly. Consider prepared statements for production.
+        std::string query = "SELECT id, username, password_hash FROM users WHERE username = '" + username + "' LIMIT 1;";
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getUserByUsername: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getUserByUsername: Query failed: " + err);
+        }
+        MYSQL_RES* result = mysql_store_result(conn);
+        if (!result) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("getUserByUsername: Failed to retrieve result: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("getUserByUsername: Failed to retrieve result: " + err);
+        }
+        std::optional<User> user = std::nullopt;
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (row && row[0]) {
+            User u;
+            u.id = std::stoi(row[0]);
+            u.username = row[1] ? row[1] : "";
+            u.password_hash = row[2] ? row[2] : "";
+            user = u;
+            Logger::logDebug("getUserByUsername: Found user '" + username + "'");
+        } else {
+            Logger::logDebug("getUserByUsername: No user found for username: " + username);
+        }
+        mysql_free_result(result);
+        mysql_close(conn);
+        return user;
     }
-    // Pretty-print the JSON with an indent of 4 spaces.
-    out << data.dump(4);
-}
+
+    /**
+     * @brief Create a new user.
+     *
+     * Inserts a new record into the "users" table. Throws an exception on failure.
+     *
+     * @param username The user's username.
+     * @param hashedPassword The user's hashed password.
+     * @return True if insertion succeeded.
+     */
+    bool createUser(const std::string& username, const std::string& hashedPassword) {
+        if (username.empty() || hashedPassword.empty()) {
+            Logger::logErr("createUser: Username or hashedPassword is empty.");
+            throw std::invalid_argument("createUser: Username and hashedPassword cannot be empty.");
+        }
+        MYSQL* conn = createConnection();
+        std::stringstream ss;
+        ss << "INSERT INTO users (username, password_hash) VALUES ('" << username << "', '" << hashedPassword << "');";
+        std::string query = ss.str();
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("createUser: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("createUser: Query failed: " + err);
+        }
+        mysql_close(conn);
+        Logger::logDebug("createUser: User '" + username + "' created successfully.");
+        return true;
+    }
+
+    /**
+     * @brief Update a user's password.
+     *
+     * Executes an UPDATE on the "users" table. Throws an exception on failure.
+     *
+     * @param username The username.
+     * @param newHashedPassword The new hashed password.
+     * @return True if update succeeded.
+     */
+    bool updateUserPassword(const std::string& username, const std::string& newHashedPassword) {
+        if (username.empty() || newHashedPassword.empty()) {
+            Logger::logErr("updateUserPassword: Username or newHashedPassword is empty.");
+            throw std::invalid_argument("updateUserPassword: Username and newHashedPassword cannot be empty.");
+        }
+        MYSQL* conn = createConnection();
+        std::stringstream ss;
+        ss << "UPDATE users SET password_hash = '" << newHashedPassword << "' WHERE username = '" << username << "';";
+        std::string query = ss.str();
+        if (mysql_query(conn, query.c_str())) {
+            std::string err = mysql_error(conn);
+            Logger::logErr("updateUserPassword: Query failed: " + err);
+            mysql_close(conn);
+            throw std::runtime_error("updateUserPassword: Query failed: " + err);
+        }
+        mysql_close(conn);
+        Logger::logDebug("updateUserPassword: Password updated successfully for user: " + username);
+        return true;
+    }
 
 } // end namespace DAL
 
-/***********************************************************
- * EXAMPLE USAGE:
- * 
- * In another source file (e.g., example.cc), you can include the 
- * data_access_layer.h header and use the functions as follows:
- * 
- *   #include "data_access_layer.h"
- *   #include <iostream>
- * 
- *   int main() {
- *       // Retrieve and print all table names:
- *       auto tables = DAL::get_tables();
- *       for (const auto& table : tables) {
- *           std::cout << "Table: " << table << std::endl;
- *       }
- * 
- *       // Get the file path for a specific note (e.g., note ID 1)
- *       std::string notePath = DAL::get_note_file_path(1);
- *       std::cout << "File path for note 1: " << notePath << std::endl;
- * 
- *       return 0;
- *   }
- * 
- * Note: Since the code uses MySQL's functions, you must ensure that 
- * the MySQL library is linked. As shown in your CMakeLists.txt, CMake 
- * automatically locates and links the MySQL Connector/C++ (or MySQL client)
- * library. There's no fully header-only replacement for MySQL's API.
- ***********************************************************/
+/* ---------------------------------------------------------------------------
+   Example Usage (for integration reference)
+
+   // The following commented code demonstrates how to use the Data Access Layer.
+   // Place it in a separate source file (e.g., example.cc) for testing or integration.
+
+   #include "data_access_layer.h"
+   #include "logger.h"
+   #include <iostream>
+   #include <optional>
+
+   int main() {
+       try {
+           // Retrieve and log all table names.
+           auto tables = DAL::getTables();
+           Logger::log("Tables in database:");
+           for (const auto& table : tables) {
+               Logger::log(" - " + table);
+           }
+           
+           // Get class IDs for a user (e.g., user with ID 1).
+           unsigned int userId = 1;
+           auto classIds = DAL::getClassIds(userId);
+           Logger::log("Class IDs for user " + std::to_string(userId) + ":");
+           for (const auto& id : classIds) {
+               Logger::log(" " + std::to_string(id));
+           }
+           
+           // Get note IDs for the same user.
+           auto noteIds = DAL::getNoteIds(userId);
+           Logger::log("Note IDs for user " + std::to_string(userId) + ":");
+           for (const auto& id : noteIds) {
+               Logger::log(" " + std::to_string(id));
+           }
+           
+           // Retrieve the file path for a specific note and perform file operations.
+           if (!noteIds.empty()) {
+               std::string notePath = DAL::getNoteFilePath(noteIds[0]);
+               Logger::log("File path for note " + std::to_string(noteIds[0]) + ": " + notePath);
+               DAL::writeFile(notePath, "This is sample note content stored in the file system.");
+               std::string content = DAL::readTxtFile(notePath);
+               Logger::log("Content of " + notePath + ": " + content);
+           }
+           
+           // Write and read JSON data.
+           nlohmann::json jsonData = { {"file_path", "data.json"}, {"name", "Folium"}, {"version", 1.0} };
+           DAL::writeJsonFile(jsonData);
+           Logger::log("JSON data written successfully.");
+           nlohmann::json readData = DAL::readJsonFile("data.json");
+           Logger::log("Read JSON data: " + readData.dump());
+           
+           // Demonstrate authentication functions.
+           if (DAL::createUser("new_user", "new_hashed_password")) {
+               Logger::log("User created successfully.");
+           }
+           std::optional<User> user = DAL::getUserByUsername("new_user");
+           if (user.has_value()) {
+               Logger::log("Found user: " + user->username);
+           }
+           if (DAL::updateUserPassword("new_user", "updated_hashed_password")) {
+               Logger::log("User password updated successfully.");
+           }
+       } catch (const std::exception& e) {
+           Logger::logErr(std::string("Exception caught: ") + e.what());
+           return 1;
+       }
+       return 0;
+   }
+   --------------------------------------------------------------------------- */

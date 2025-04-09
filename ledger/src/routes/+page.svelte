@@ -35,22 +35,21 @@
   });
 
     // Functions to manage the modal popup
-    const openModal = () => {
+  const openModal = () => {
     showModal = true;
   };
 
   const closeModal = () => {
     showModal = false;
-    // Optionally clear input fields after closing
+    // Clear input fields when closing the modal
     className = "";
     startDate = "";
     endDate = "";
   };
 
   const addClass = () => {
-    // Here you can include validation or API calls
     console.log("New class added:", className, startDate, endDate);
-    // For now, simply close the modal after the button is clicked
+    // You can later add API calls or validation here.
     closeModal();
   };
 </script>
@@ -76,39 +75,27 @@
 {/if}
 
 
+<!-- Button to open the Add New Class popup -->
 <Button class="mt-5" on:click={openModal}>Add New Class</Button>
 
 {#if showModal}
-  <!-- Renamed the overlay class -->
+  <!-- Modal Overlay; clicking anywhere here closes the modal -->
   <div class="custom-modal-overlay" on:click={closeModal}>
-    <!-- Renamed the modal class -->
+    <!-- Modal box; clicking inside does not close the modal -->
     <div class="custom-modal" on:click|stopPropagation>
       <div class="custom-modal-header">Add New Class</div>
       <div class="custom-modal-body">
         <div>
           <label for="className">Class Name:</label>
-          <input
-            id="className"
-            type="text"
-            bind:value={className}
-            placeholder="Enter class name"
-          />
+          <input id="className" type="text" bind:value={className} placeholder="Enter class name" />
         </div>
         <div>
           <label for="startDate">Start Date:</label>
-          <input
-            id="startDate"
-            type="date"
-            bind:value={startDate}
-          />
+          <input id="startDate" type="date" bind:value={startDate} />
         </div>
         <div>
           <label for="endDate">End Date:</label>
-          <input
-            id="endDate"
-            type="date"
-            bind:value={endDate}
-          />
+          <input id="endDate" type="date" bind:value={endDate} />
         </div>
       </div>
       <div class="custom-modal-footer">

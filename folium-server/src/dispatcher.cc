@@ -101,6 +101,41 @@ public:
         }
     }
 
+    // New function: Listens for incoming tasks via a FIFO channel.
+    // This function opens a FIFO for reading requests and another for sending responses.
+    // It loops forever, reading a Task from the request FIFO, dispatching it, and then sending back a response.
+    void listen(const std::string& reqFifoPath, const std::string& resFifoPath) {
+        // Create FIFO channels for requests and responses.
+        ipc::FifoChannel requestChannel(reqFifoPath, O_RDONLY, true);
+        ipc::FifoChannel responseChannel(resFifoPath, O_WRONLY, true);
+        
+        ipc::Task ipcTask;
+        while (true) {
+            // Block until a task is received via the FIFO.
+            if (requestChannel.read(ipcTask)) {
+                std::cout << "[Dispatcher] Received IPC Task: ";
+                ipcTask.print();
+                // Convert ipc::Task to ExtendedTask.
+                // (In a real system, you’d parse payload to determine type and parameters.)
+                // Here we use task.id as an example to pick a type:
+                Task_Type type = static_cast<Task_Type>(ipcTask.id);
+                ExtendedTask extTask(type, ipcTask.id, 0, ipcTask.payload);
+                // Dispatch the task using our addTask function.
+                addTask(extTask);
+                // After processing, mark the IPC task as completed and send it back.
+                ipcTask.completed = true;
+                responseChannel.send(ipcTask);
+            }
+        }
+    }
+
+        // New function: Start the listener on a separate thread.
+    void start(const std::string& reqFifoPath, const std::string& resFifoPath) {
+        std::thread listenerThread(&DispatcherImpl::listen, this, reqFifoPath, resFifoPath);
+        // Detach so that the listener runs in the background.
+        listenerThread.detach();
+    }
+
     // Stop the dispatcher and join all threads.
     void stop() {
         {
@@ -179,6 +214,11 @@ static DispatcherImpl dispatcherImpl;
 // --- Public interface as declared in the header file ---
 bool create_threads(unsigned int num_threads) {
     return dispatcherImpl.createThreads(num_threads);
+}
+
+// New: Expose the start() function so that the dispatcher begins listening.
+void start_listening(const std::string& reqFifoPath, const std::string& resFifoPath) {
+    dispatcherImpl.start(reqFifoPath, resFifoPath);
 }
 
 // --- Additional internal functions for testing ---

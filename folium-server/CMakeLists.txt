@@ -89,7 +89,6 @@ add_library(folium-core
     src/http_gateway.cc
     src/logger.cc
     src/pipe-filter.cc
-    src/api_routes.cc 
 )
 
 # Set include directories for the library
@@ -136,8 +135,16 @@ enable_testing()
 
 # Core
 add_executable(core_test tests/test_core.cc)
-target_link_libraries(core_test PRIVATE folium-core gtest gtest_main)
-add_test(NAME core_test COMMAND log_test)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main ${MYSQLCPPCONN_LIB})
+add_test(NAME core_test COMMAND core_test)
+
+# Add MySQL include and library paths
+include_directories(/opt/homebrew/opt/mysql-client/include)
+link_directories(/opt/homebrew/opt/mysql-client/lib)
+
+# Link the MySQL client library
+target_link_libraries(folium-core PRIVATE mysqlclient)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main mysqlclient)
 
 # Gateway
 add_executable(gateway_test tests/test_gateway.cc)

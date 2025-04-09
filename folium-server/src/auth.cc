@@ -1,137 +1,263 @@
+/**
+ * @file auth.cc
+ *
+ * @brief Authentication implementation for the Folium server.
+ *
+ * Implements login, logout, create user, change password, token validation, and token refresh.
+ * All operations rely solely on generating or validating JWT tokens without storing any session data in the database.
+ *
+ * All functionality is keyed by username: a logged-in user (one that possesses a valid token)
+ * is allowed to perform every operation.
+ *
+ * Changes in this version:
+ *   - login returns the JWT token string without saving it to the database.
+ *   - registerUser returns the new user's ID and throws a std::runtime_error on error.
+ *   - check_credentials takes an extra std::string& parameter to report error messages.
+ *   - refreshToken now generates and returns a new token (throwing on error) without performing any token deletion or database operations.
+ *   - logout now simply logs the logout request, as tokens are stateless.
+ *   - validateToken verifies the token's signature and expiration only.
+ *   - isLoggedIn always returns false (since login state is not tracked server-side).
+ */
+
 #include "auth.h"
+#include "data_access_layer.h"
+
+#include <jwt-cpp/jwt.h>
+#include <openssl/sha.h>
+#include <nlohmann/json.hpp>
+#include "logger.h"
+
 #include <iostream>
-#include <string>
-#include <unordered_map>
+#include <sstream>
+#include <chrono>
+#include <ctime>
+#include <optional>
+#include <stdexcept>
 
-// A simple User structure to store the hashed password and role.
-struct User {
-    std::string password;  // In production, store securely hashed password.
-    Auth::Role role;
-};
+// Using declarations
+using json = nlohmann::json;
 
-// In-memory store for users.
-static std::unordered_map<std::string, User> users;
+// JWT secret key (in production, store securely and do not hard-code)
+static const std::string jwt_secret = "operating_systems";
 
-// Helper to seed the default admin user at startup.
-static void initDefaultUser() {
-    if (users.find("admin") == users.end()) {
-        // For the prototype, the default admin password is "password".
-        users["admin"] = { Auth::hashPassword("password"), Auth::ADMIN };
-        std::cout << "Default admin user seeded." << std::endl;
+// -----------------------------------------------------------------------------
+// Helper Function: Hash a password using SHA256.
+// (For demonstration purposes only – in production use bcrypt, Argon2, or similar.)
+std::string hashPasswordImpl(const std::string& password) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(password.c_str()), password.size(), hash);
+    std::stringstream ss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i) {
+        ss << std::hex << std::setw(2) << std::setfill('0')
+           << static_cast<int>(hash[i]);
+    }
+    return ss.str();
+}
+
+// -----------------------------------------------------------------------------
+// Helper Function: Verify that a plain-text password matches its hashed version.
+bool verifyPasswordImpl(const std::string& hashedPassword, const std::string& plainPassword) {
+    return hashPasswordImpl(plainPassword) == hashedPassword;
+}
+
+// -----------------------------------------------------------------------------
+// check_credentials:
+// Retrieves the user record via the DAL and verifies the provided password.
+// Writes an error message to 'message' if the user is not found or the password is incorrect.
+bool auth::check_credentials(const std::string& username, const std::string& password, std::string &message) {
+    auto userOpt = DAL::getUserByUsername(username);
+    if (!userOpt.has_value()) {
+        message = "User not found";
+        return false;
+    }
+    if (!verifyPasswordImpl(userOpt->password_hash, password)) {
+        message = "Bad password";
+        return false;
+    }
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// login:
+// Generates a JWT token for the specified user and returns the token.
+// No token is stored in the database; this function simply generates a new token
+// with updated issued-at and expiration times (24 hours from now).
+std::string auth::login(const std::string& username) {
+    auto userOpt = DAL::getUserByUsername(username);
+    if (!userOpt.has_value()) {
+        Logger::logErr("Login failed: user '" + username + "' not found.");
+        return "";
+    }
+    int user_id = userOpt->id;
+
+    // Generate a JWT token with a 24-hour expiry using the current time.
+    auto now = std::chrono::system_clock::now();
+    auto exp = now + std::chrono::hours(24);
+
+    std::string token = jwt::create()
+                            .set_type("JWT")
+                            .set_issued_at(now)    // pass the time_point directly
+                            .set_expires_at(exp)   // pass the time_point directly
+                            .set_subject(std::to_string(user_id))
+                            .sign(jwt::algorithm::hs256{jwt_secret});
+
+    Logger::logDebug("Login successful for user '" + username + "'. Token generated.");
+    return token;
+}
+
+// -----------------------------------------------------------------------------
+// logout:
+// In a stateless token system, logout is handled on the client side by discarding the token.
+// Here we simply log the logout request.
+void auth::logout(const std::string& username) {
+    Logger::log("Logout requested for user '" + username + "'. No state is maintained server-side.");
+}
+
+// -----------------------------------------------------------------------------
+// registerUser:
+// Registers a new user by hashing the provided password and storing the user via the DAL.
+// Returns the new user's ID if registration is successful; otherwise, throws a std::runtime_error.
+int auth::registerUser(const std::string& username, const std::string& password) {
+    // Check if the user already exists.
+    if (DAL::getUserByUsername(username).has_value()) {
+        throw std::runtime_error("User already exists");
+    }
+    std::string hashed = hashPasswordImpl(password);
+    if (!DAL::createUser(username, hashed)) {
+        throw std::runtime_error("Failed to create user due to a database error");
+    }
+    auto userOpt = DAL::getUserByUsername(username);
+    if (!userOpt.has_value()) {
+        throw std::runtime_error("User creation succeeded but could not retrieve user ID");
+    }
+    return userOpt->id;
+}
+
+// -----------------------------------------------------------------------------
+// validateToken:
+// Validates a JWT token by verifying its signature and expiration.
+// No database lookup is performed since tokens are not stored.
+bool auth::validateToken(const std::string& token) {
+    try {
+        auto decoded = jwt::decode(token);
+        auto verifier = jwt::verify().allow_algorithm(jwt::algorithm::hs256{jwt_secret});
+        verifier.verify(decoded);
+        return true;
+    } catch (const std::exception& e) {
+        Logger::logErr("Token validation error: " + std::string(e.what()));
+        return false;
     }
 }
 
-namespace Auth {
+// -----------------------------------------------------------------------------
+// refreshToken:
+// Refreshes a token by generating a new token for the same user with updated issued-at
+// and expiration times (24 hours from now). Throws std::runtime_error on error.
+std::string auth::refreshToken(const std::string& token) {
+    try {
+        auto decoded = jwt::decode(token);
+        std::string subject = decoded.get_subject();
 
-    // Checks the credentials for the given user.
-    bool check_credentials(const std::string& username, const std::string& password) {
-        auto it = users.find(username);
-        if (it != users.end()) {
-            return verifyPassword(it->second.password, password);
-        }
+    auto now = std::chrono::system_clock::now();
+    auto exp = now + std::chrono::hours(24);
+
+    std::string newToken = jwt::create()
+        .set_type("JWT")
+        .set_issued_at(now)   // pass time_point directly
+        .set_expires_at(exp)  // pass time_point directly
+        .set_subject(subject)
+        .sign(jwt::algorithm::hs256{jwt_secret});
+
+        return newToken;
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("Error refreshing token: ") + e.what());
+    }
+}
+
+// -----------------------------------------------------------------------------
+// changePassword:
+// Changes the user's password by verifying the old password, hashing the new password,
+// updating the database via the DAL, and (since tokens are stateless) simply returns a success value.
+bool auth::changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword) {
+    auto userOpt = DAL::getUserByUsername(username);
+    if (!userOpt.has_value()) {
+        Logger::logErr("Change password failed: user '" + username + "' not found.");
         return false;
     }
-
-    // Begins a user's session.
-    void login(const std::string& username) {
-        std::cout << "User " << username << " logged in." << std::endl;
-        // In a real system, you would start a session or log this event.
-    }
-
-    // Terminates the user's session.
-    void logout(const std::string& username) {
-        std::cout << "User " << username << " logged out." << std::endl;
-        // Here you would clean up session data.
-    }
-
-    // Registers a new user. Returns true if registration succeeds.
-    bool registerUser(const std::string& username, const std::string& password) {
-        if (users.find(username) != users.end()) {
-            std::cerr << "User " << username << " already exists." << std::endl;
-            return false;
-        }
-        users[username] = { hashPassword(password), Auth::USER };
-        std::cout << "User " << username << " registered successfully." << std::endl;
-        return true;
-    }
-
-    // Validates a token.
-    // For this prototype, a token is considered valid if it begins with "token_for_".
-    bool validateToken(const std::string& token) {
-        return token.find("token_for_") == 0;
-    }
-
-    // Refreshes an expired token by appending "_refreshed" to it.
-    std::string refreshToken(const std::string& token) {
-        if (validateToken(token)) {
-            return token + "_refreshed";
-        }
-        return "";
-    }
-
-    // A naive hash function that prepends "hashed_" to a password.
-    // WARNING: This is only for prototyping purposes.
-    std::string hashPassword(const std::string& password) {
-        return "hashed_" + password;
-    }
-
-    // Verifies a plaintext password against a stored hashed password.
-    bool verifyPassword(const std::string& hashedPassword, const std::string& plainPassword) {
-        return hashedPassword == hashPassword(plainPassword);
-    }
-
-    // Returns the role of a user. Defaults to USER if not found.
-    Role getUserRole(const std::string& username) {
-        auto it = users.find(username);
-        if (it != users.end()) {
-            return it->second.role;
-        }
-        return USER;
-    }
-
-    // Checks whether the given user has the required permission based on role.
-    // For demonstration, ADMINs have all permissions; for USERs, only CAN_CREATE_NOTE is allowed.
-    bool checkPermissions(const std::string& username, const Permission permission, const Role role) {
-        auto it = users.find(username);
-        if (it == users.end()) {
-            return false;
-        }
-        if (it->second.role != role) {
-            return false;
-        }
-        if (role == ADMIN) {
-            return true;
-        }
-        if (role == USER) {
-            // For now, only CAN_CREATE_NOTE is allowed for USER.
-            return (permission == CAN_CREATE_NOTE);
-        }
+    auto user = userOpt.value();
+    if (!verifyPasswordImpl(user.password_hash, oldPassword)) {
+        Logger::logErr("Change password failed: incorrect old password for user '" + username + "'.");
         return false;
     }
-
-    // Additional function for changing the password.
-    // Returns true if the password was changed successfully.
-    bool changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword) {
-        auto it = users.find(username);
-        if (it == users.end()) {
-            std::cerr << "User " << username << " not found." << std::endl;
-            return false;
-        }
-        if (!verifyPassword(it->second.password, oldPassword)) {
-            std::cerr << "Old password is incorrect for user " << username << std::endl;
-            return false;
-        }
-        it->second.password = hashPassword(newPassword);
-        std::cout << "Password changed successfully for user " << username << std::endl;
-        return true;
+    std::string newHashed = hashPasswordImpl(newPassword);
+    if (!DAL::updateUserPassword(username, newHashed)) {
+        Logger::logErr("Change password failed: unable to update password for user '" + username + "'.");
+        return false;
     }
+    Logger::log("Password changed successfully for user '" + username + "'.");
+    return true;
+}
 
-} // namespace Auth
+// -----------------------------------------------------------------------------
+// isLoggedIn:
+// In a stateless design, there's no server-side session tracking, so we cannot determine
+// a user's logged-in state solely by username. This function returns false.
 
-// Static initializer to seed the default admin user upon module load.
-struct AuthInitializer {
-    AuthInitializer() {
-        initDefaultUser();
-    }
-};
-static AuthInitializer initializer;
+bool auth::isLoggedIn(const std::string& /*username*/) {
+    return false; // @alyashour I am guessing like you said yea we don't need this function.
+}
+
+/*
+ * Usage Example:
+ *
+ * try {
+ *     // Register a new user:
+ *     int userID = auth::registerUser("alice", "secret123");
+ *     std::cout << "User 'alice' registered with userID: " << userID << std::endl;
+ * } catch (const std::exception& ex) {
+ *     std::cerr << "Registration failed for 'alice': " << ex.what() << std::endl;
+ * }
+ *
+ * // Check credentials:
+ * std::string credMsg;
+ * if (auth::check_credentials("alice", "secret123", credMsg)) {
+ *     std::cout << "Credentials for 'alice' are valid: " << credMsg << std::endl;
+ * } else {
+ *     std::cerr << "Credential check failed for 'alice': " << credMsg << std::endl;
+ * }
+ *
+ * // Log in the user (token is returned):
+ * std::string token = auth::login("alice");
+ * if (!token.empty()) {
+ *     std::cout << "Login successful for 'alice'. Token: " << token << std::endl;
+ * }
+ *
+ * // Validate the token:
+ * if (auth::validateToken(token)) {
+ *     std::cout << "User 'alice' is logged in (token is valid)." << std::endl;
+ * } else {
+ *     std::cout << "User 'alice' is not logged in (token is invalid or expired)." << std::endl;
+ * }
+ *
+ * // Refresh the token:
+ * try {
+ *     std::string newToken = auth::refreshToken(token);
+ *     std::cout << "Token refreshed successfully. New token: " << newToken << std::endl;
+ * } catch (const std::exception& ex) {
+ *     std::cerr << "Token refresh failed: " << ex.what() << std::endl;
+ * }
+ *
+ * // Change the user's password:
+ * if (auth::changePassword("alice", "secret123", "newSecret456")) {
+ *     std::cout << "Password for 'alice' changed successfully." << std::endl;
+ * } else {
+ *     std::cerr << "Failed to change password for 'alice'." << std::endl;
+ * }
+ *
+ * // Logout (no state is maintained on the server):
+ * auth::logout("alice");
+ *
+ * // Note:
+ * // All operations use the username to identify the user.
+ * // Token-based validation (auth::validateToken) is used to check whether a token is valid.
+ */

@@ -69,8 +69,14 @@ FetchContent_Declare(
   GIT_TAG        v3.11.3
 )
 
+fetchcontent_declare(jwt-cpp 
+    GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
+    GIT_TAG e71e0c2d584baff06925bbb3aad683f677e4d498
+)
+set(JWT_BUILD_EXAMPLES OFF CACHE BOOL "disable building examples" FORCE)
+
 # Make the libraries available
-FetchContent_MakeAvailable(googletest httplib json)
+FetchContent_MakeAvailable(googletest httplib json jwt-cpp)
 
 ## SET UP EXECUTABLE ##
 
@@ -105,9 +111,12 @@ if(NOT MYSQLCPPCONN_LIB)
 endif()
 
 # Link dependencies
-target_link_libraries(folium-core PUBLIC nlohmann_json::nlohmann_json)
-target_link_libraries(folium-core PUBLIC httplib)
-target_link_libraries(folium-core PUBLIC ${MYSQLCPPCONN_LIB})
+target_link_libraries(folium-core PUBLIC 
+    nlohmann_json::nlohmann_json
+    httplib
+    ${MYSQLCPPCONN_LIB}
+    jwt-cpp
+)
 
 # Create the server executable
 add_executable(folium-server src/main.cc)

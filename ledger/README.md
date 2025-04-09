@@ -6,7 +6,6 @@ Currently in early development. Going for a Wikipedia-esque interface.
 ## To run
 Clone, npm install, add the following to a .env file:
 ```conf
-PUBLIC_LEDGER_PING_URL=<END POINT HERE>
 PUBLIC_API_BASE_URL=<URL HERE>
 ```
 

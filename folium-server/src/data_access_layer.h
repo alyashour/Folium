@@ -16,11 +16,20 @@
 #ifndef FOLSERV_DATA_ACCESS_LAYER_H_
 #define FOLSERV_DATA_ACCESS_LAYER_H_
 
-#include <vector>
 #include <string>
+#include <vector>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 namespace DAL {
+
+    // A simple User struct for demonstration.
+    struct User {
+        int id;
+        std::string username;
+        std::string password_hash;
+    };
+
     //////////////
     /* DATABASE */
     //////////////
@@ -29,26 +38,28 @@ namespace DAL {
      * @brief Retrieve the list of database tables.
      * @return A vector of strings containing the names of all tables in the database.
      */
-    std::vector<std::string> get_tables();
+    std::vector<std::string> getTables();
 
     /**
      * @brief Retrieve the class IDs associated with a specific user.
-     * @param user_id The ID of the user whose class IDs are to be retrieved.
+     * @param userId The ID of the user whose class IDs are to be retrieved.
+     * @return A vector of integer class IDs.
      */
-    void get_class_ids(const unsigned int user_id);
+    std::vector<int> getClassIds(const unsigned int userId);
 
     /**
      * @brief Retrieve the note IDs associated with a specific user.
-     * @param user_id The ID of the user whose note IDs are to be retrieved.
+     * @param userId The ID of the user whose note IDs are to be retrieved.
+     * @return A vector of integer note IDs.
      */
-    void get_note_ids(const unsigned int user_id);
+    std::vector<int> getNoteIds(const unsigned int userId);
 
     /**
      * @brief Retrieve the file path for a specific note.
-     * @param note_id The ID of the note whose file path is to be retrieved.
+     * @param noteId The ID of the note whose file path is to be retrieved.
      * @return A string containing the file path of the note.
      */
-    std::string get_note_file_path(const unsigned int note_id);
+    std::string getNoteFilePath(const unsigned int noteId);
 
     ///////////
     /* FILES */
@@ -56,18 +67,18 @@ namespace DAL {
 
     /**
      * @brief Read the contents of a file.
-     * @param file_path The path to the file to be read.
+     * @param filePath The path to the file to be read.
      * @return A string containing the contents of the file.
      */
-    std::string read_file(const std::string& file_path);
+    std::string readFile(const std::string& filePath);
 
     /**
      * @brief Write data to a file.
-     * @param file_path The path to the file to be written.
+     * @param filePath The path to the file to be written.
      * @param data The data to write to the file.
      * @return True if the operation was successful, false otherwise.
      */
-    bool write_file(const std::string& file_path, const std::string& data);
+    bool writeFile(const std::string& filePath, const std::string& data);
 
     //////////
     /* TEXT */
@@ -75,10 +86,10 @@ namespace DAL {
 
     /**
      * @brief Read the contents of a plain text file.
-     * @param file_path The path to the text file to be read.
+     * @param filePath The path to the text file to be read.
      * @return A string containing the contents of the text file.
      */
-    std::string read_txt_file(const std::string& file_path);
+    std::string readTxtFile(const std::string& filePath);
 
     //////////
     /* JSON */
@@ -86,16 +97,41 @@ namespace DAL {
 
     /**
      * @brief Read the contents of a JSON file.
-     * @param file_path The path to the JSON file to be read.
+     * @param filePath The path to the JSON file to be read.
      * @return A JSON object containing the parsed data from the file.
      */
-    nlohmann::json read_json_file(const std::string& file_path);
+    nlohmann::json readJsonFile(const std::string& filePath);
 
     /**
      * @brief Write data to a JSON file.
      * @param data The JSON object to write to the file.
      */
-    void write_json_file(const nlohmann::json& data);
+    void writeJsonFile(const nlohmann::json& data);
+
+    // ===== AUTH-RELATED FUNCTIONS ===== //
+
+    /**
+     * @brief Retrieve a user by username.
+     * @param username The username to search for.
+     * @return An optional User object; if not found, std::nullopt is returned.
+     */
+    std::optional<User> getUserByUsername(const std::string& username);
+
+    /**
+     * @brief Create a new user.
+     * @param username The user's username.
+     * @param hashedPassword The user's hashed password.
+     * @return True if the user was created successfully.
+     */
+    bool createUser(const std::string& username, const std::string& hashedPassword);
+
+    /**
+     * @brief Update a user's password.
+     * @param username The user's username.
+     * @param newHashedPassword The new hashed password.
+     * @return True if the password was successfully updated.
+     */
+    bool updateUserPassword(const std::string& username, const std::string& newHashedPassword);
 }
 
 #endif // FOLSERV_DATA_ACCESS_LAYER_H_

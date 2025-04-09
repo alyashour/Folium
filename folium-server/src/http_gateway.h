@@ -16,6 +16,8 @@
 
 #include "httplib.h"
 
+#include "fifo_channel.h"
+
 #include <string>
 #include <thread>
 #include <atomic>
@@ -28,11 +30,15 @@ namespace gateway
         std::thread serverThread;
         httplib::Server svr;
 
-        void initializeRoutes();
-
+        ipc::FifoChannel in_, out_;
     public:
-        Gateway();
+        Gateway(ipc::FifoChannel in, ipc::FifoChannel out);
         ~Gateway();
+
+        /**
+         * Tells the coupled process to shut down (through the fifo pipe).
+         */
+        void signal_shutdown();
 
         /**
          * @brief Start listening for incoming HTTP requests in another thread.

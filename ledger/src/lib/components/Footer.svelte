@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import { Container, Tooltip } from "@sveltestrap/sveltestrap";
     import { version, dev } from "$app/environment";
-    import { PUBLIC_LEDGER_PING_URL } from "$env/static/public";
+    import { PUBLIC_API_BASE_URL } from "$env/static/public";
 
     let serverStatus: "up" | "error" | "timeout" | "unknown" = "unknown";
 
@@ -28,7 +28,7 @@
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 5000);
-            const response = await fetch(PUBLIC_LEDGER_PING_URL, {
+            const response = await fetch(PUBLIC_API_BASE_URL + "/ping", {
                 signal: controller.signal,
             });
             clearTimeout(timeout);

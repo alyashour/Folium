@@ -19,7 +19,7 @@
 #include <string>
 #include <sstream>
 
-namespace Logger
+namespace logger
 {
 
     /**
@@ -32,6 +32,10 @@ namespace Logger
         WARN,
         ERR
     };
+
+    void log(std::string s);
+
+    void logErr(std::string s, bool do_log_trace=false);
 
     /**
      * @brief Logger class for instance-based logging.

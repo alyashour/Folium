@@ -19,8 +19,8 @@ const std::string DP2GW = "DP2GW";
 
 int main(void)
 {
-    Logger::log("Starting Folium Server v" + Folium::VERSION);
-    Logger::logS("Folium Server v", Folium::VERSION, " (build ", Folium::BUILD_ID, " ", Folium::BUILD_DATE, ")");
+    logger::log("Starting Folium Server v" + Folium::VERSION);
+    logger::logS("Folium Server v", Folium::VERSION, " (build ", Folium::BUILD_ID, " ", Folium::BUILD_DATE, ")");
 
     // Auto-cleanup on crash or Ctrl+C
     ipc::install_signal_handler();
@@ -39,7 +39,7 @@ int main(void)
 
     if (pid == 0) {
         // child
-        Logger::logS("Dispatch process online with pid: ", pid);
+        logger::logS("Dispatch process online with pid: ", pid);
 
         // create dispatcher
         ipc::FifoChannel in(GW2DP, O_RDONLY);
@@ -50,13 +50,13 @@ int main(void)
         dispatcher.start();
 
         // after close
-        Logger::log("Dispatch process done, closing...");
+        logger::log("Dispatch process done, closing...");
 
         return 0;
     }
     // parent
     else {
-        Logger::logS("Gateway process online with pid: ", pid);
+        logger::logS("Gateway process online with pid: ", pid);
 
         // create gateway
         ipc::FifoChannel out(GW2DP, O_WRONLY);
@@ -80,12 +80,12 @@ int main(void)
         }
 
         // after close, print and wait for child process to finish
-        Logger::log("Gateway process done, merging with Gateway process...");
+        logger::log("Gateway process done, merging with Gateway process...");
         wait(nullptr);
 
-        Logger::log("Processes merged.");
+        logger::log("Processes merged.");
     }
 
-    Logger::log("Folium Server Closed.");
+    logger::log("Folium Server Closed.");
     return 0;
 }

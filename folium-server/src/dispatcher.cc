@@ -18,15 +18,15 @@ constexpr double MIN_SLEEP = 2, MAX_SLEEP = 3; // seconds
 
 F_Task processTask(F_Task &task)
 {
-    Logger::logS("Processing task: ", task.type_);
+    logger::logS("Processing task: ", task.type_);
     
     // Ensure PING tasks get proper responses
     if (task.type_ == F_TaskType::PING) {
         task.data_ = {{"status", "success"}, {"message", "pong from dispatch"}};
-        Logger::log("Created PING response with data payload");
+        logger::log("Created PING response with data payload");
     }
     
-    Logger::logS("Done processing task: ", task.type_);
+    logger::logS("Done processing task: ", task.type_);
     return task;
 }
 
@@ -37,7 +37,7 @@ Dispatcher::Dispatcher(ipc::FifoChannel &in, ipc::FifoChannel &out, const unsign
     F_Task task;
     in_.read(task);
 
-    Logger::log("Dispatch Pong!");
+    logger::log("Dispatch Pong!");
     out_.send(F_Task(F_TaskType::PING));
 
     createThreadPool(numThreads);
@@ -58,7 +58,7 @@ void Dispatcher::createThreadPool(const unsigned int numThreads)
 // Worker thread function to process tasks
 void Dispatcher::processInboundTasks(int threadId)
 {
-    Logger::logS("Worker thread ", threadId, " started");
+    logger::logS("Worker thread ", threadId, " started");
     
     while (running_)
     {
@@ -83,7 +83,7 @@ void Dispatcher::processInboundTasks(int threadId)
                 taskQueue_.pop();
                 hasTask = true;
                 task.threadId_ = threadId;
-                Logger::logS("Thread ", threadId, " picked up task of type: ", task.type_);
+                logger::logS("Thread ", threadId, " picked up task of type: ", task.type_);
             }
         }
         
@@ -91,11 +91,11 @@ void Dispatcher::processInboundTasks(int threadId)
         if (hasTask) {
             F_Task response = processTask(task);
             out_.send(response);
-            Logger::logS("Thread ", threadId, " completed task");
+            logger::logS("Thread ", threadId, " completed task");
         }
     }
     
-    Logger::logS("Worker thread ", threadId, " shutting down");
+    logger::logS("Worker thread ", threadId, " shutting down");
 }
 
 // Start the listening process
@@ -107,12 +107,12 @@ void Dispatcher::start()
         F_Task task;
         in_.read(task);
         
-        Logger::log("Task received at dispatch!");
+        logger::log("Task received at dispatch!");
 
         // if it's a syskill task
         if (task.type_ == F_TaskType::SYSKILL)
         {
-            Logger::log("Dispatch recieved kill signal.");
+            logger::log("Dispatch recieved kill signal.");
             // Signal threads to shut down
             {
                 std::unique_lock<std::mutex> lock(taskMutex_);
@@ -128,7 +128,7 @@ void Dispatcher::start()
             
             // Check if we're at max capacity
             if (taskQueue_.size() >= threadPool_.size()) {
-                Logger::log("WARN: Server too busy, dropping request...");
+                logger::log("WARN: Server too busy, dropping request...");
                 // Release lock before sending response
                 lock.unlock();
                 
@@ -142,7 +142,7 @@ void Dispatcher::start()
                 // Add task to queue and notify a waiting thread
                 taskQueue_.push(task);
                 taskCV_.notify_one();
-                Logger::log("Task added to queue");
+                logger::log("Task added to queue");
             }
         }
     }
@@ -154,5 +154,5 @@ void Dispatcher::start()
         }
     }
     
-    Logger::log("Dispatcher shut down");
+    logger::log("Dispatcher shut down");
 }

@@ -23,12 +23,12 @@ namespace ipc
             : path_(path), fd_(-1)
         {
             // should be debug
-            Logger::log("Creating FIFO Channel" + path);
+            logger::log("Creating FIFO Channel" + path);
             if (create)
             {
                 if (mkfifo(path.c_str(), 0666) == -1 && errno != EEXIST)
                 {
-                    Logger::logErr("mkfifo failed: " + path);
+                    logger::logErr("mkfifo failed: " + path);
                     throw std::runtime_error("mkfifo failed: " + path);
                 }
             }
@@ -36,12 +36,12 @@ namespace ipc
             fd_ = open(path.c_str(), flags);
             if (fd_ == -1)
             {
-                Logger::logErr("open failed: " + path);
+                logger::logErr("open failed: " + path);
                 throw std::runtime_error("Failed to open FIFO: " + path);
             }
 
             // debug
-            Logger::log("Done creating FIFO Channel" + path);
+            logger::log("Done creating FIFO Channel" + path);
         }
 
         ~FifoChannel()
@@ -57,10 +57,10 @@ namespace ipc
             ssize_t n = ::write(fd_, &task, sizeof(F_Task));
 
             if (n == -1) {
-                Logger::logErr("FIFO Write Error");
+                logger::logErr("FIFO Write Error");
                 throw std::runtime_error("FIFO Write Error.");
             } else if (n != sizeof(F_Task)) {
-                Logger::logErr("Incomplete write to FIFO");
+                logger::logErr("Incomplete write to FIFO");
                 throw std::runtime_error("Incomplete write to FIFO.");
             }
         
@@ -72,10 +72,10 @@ namespace ipc
             ssize_t n = ::read(fd_, &task, sizeof(F_Task));
 
             if (n == 0) {
-                Logger::logErr("No writers attached, did process disconnect?");
+                logger::logErr("No writers attached, did process disconnect?");
                 throw std::runtime_error("No writers attached to pipe.");
             } else if (n == -1) {
-                Logger::logErr("FIFO Read Error");
+                logger::logErr("FIFO Read Error");
                 throw std::runtime_error("FIFO Read Error.");
             }
 
@@ -94,7 +94,7 @@ namespace ipc
             
             if (res < 0) {
                 // Error occurred in poll
-                Logger::logErr("Poll error in FIFO read");
+                logger::logErr("Poll error in FIFO read");
                 return false;
             }
             

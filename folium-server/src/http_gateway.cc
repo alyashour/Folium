@@ -53,14 +53,14 @@ std::string extractJWT(const httplib::Request &req)
  */
 void Gateway::initializeRoutes(httplib::Server &svr)
 {
-    Logger::log("Instantiating Routes...");
+    logger::log("Instantiating Routes...");
 
     /* GET ROUTES */
 
     // ping
     svr.Get("/ping", [](const httplib::Request &, httplib::Response &res)
     { 
-        Logger::log("Gateway: GET /ping.");
+        logger::log("Gateway: GET /ping.");
 
         res.set_content(
             "Pong!\n",
@@ -71,7 +71,7 @@ void Gateway::initializeRoutes(httplib::Server &svr)
     // ping-core
     svr.Get("/ping-core", [this](const httplib::Request &, httplib::Response &res)
     { 
-        Logger::log("Gateway: GET /ping-core.");
+        logger::log("Gateway: GET /ping-core.");
 
         // create task
         F_Task task;
@@ -97,7 +97,7 @@ void Gateway::initializeRoutes(httplib::Server &svr)
 
     // register
     svr.Post("/api/auth/register", [this](const httplib::Request &req, httplib::Response &res) {
-        Logger::log("Gateway: POST /api/auth/register");
+        logger::log("Gateway: POST /api/auth/register");
 
         try {
             json json_data = json::parse(req.body);
@@ -123,7 +123,7 @@ void Gateway::initializeRoutes(httplib::Server &svr)
             
             // check presence of necessary outputs
             if (!outputTask.data_.contains("message") || !outputTask.data_.contains("userId")) {
-                Logger::logErr("FATAL! WRONG FORMAT. MAKE SURE REGISTER TASK OUTPUTS CORRECT VALUES!");
+                logger::logErr("FATAL! WRONG FORMAT. MAKE SURE REGISTER TASK OUTPUTS CORRECT VALUES!");
                 throw std::runtime_error("Fatal");
             }
 
@@ -148,7 +148,7 @@ void Gateway::initializeRoutes(httplib::Server &svr)
 
     // log in
     svr.Post("/api/auth/login", [this](const httplib::Request &req, httplib::Response &res){ 
-        Logger::log("Gateway: POST /api/auth/login"); 
+        logger::log("Gateway: POST /api/auth/login"); 
 
         try {
             json json_data = json::parse(req.body);
@@ -189,19 +189,19 @@ void Gateway::initializeRoutes(httplib::Server &svr)
 
     // log out
     svr.Post("/api/auth/logout", [](const httplib::Request &req, httplib::Response &res)
-             { Logger::log("Gateway: POST /api/auth/logout"); });
+             { logger::log("Gateway: POST /api/auth/logout"); });
 
-    Logger::log("Done instantiating routes.");
+    logger::log("Done instantiating routes.");
 }
 
 Gateway::Gateway(ipc::FifoChannel& in, ipc::FifoChannel& out)
     : in_(in), out_(out)
 {
     // should be debug
-    Logger::log("Gateway constructor called.");
+    logger::log("Gateway constructor called.");
 
     // try to ping the dispatch to make sure connection is made
-    Logger::log("Gateway Ping!");
+    logger::log("Gateway Ping!");
     out_.send(F_Task(F_TaskType::PING));
 
     F_Task task;
@@ -210,7 +210,7 @@ Gateway::Gateway(ipc::FifoChannel& in, ipc::FifoChannel& out)
     if (!success) {
         throw std::runtime_error("Couldn't connect to dispatch");
     }
-    Logger::log("Gateway-Dispatch handshake complete!");
+    logger::log("Gateway-Dispatch handshake complete!");
 
     initializeRoutes(svr);
 }
@@ -222,7 +222,7 @@ Gateway::~Gateway()
 
 void Gateway::listen(std::string ip, int port)
 {
-    Logger::log("HTTP Gateway starting on " + ip + ":" + std::to_string(port));
+    logger::log("HTTP Gateway starting on " + ip + ":" + std::to_string(port));
 
     // if already running, don't run again
     if (serverThread.joinable())
@@ -241,7 +241,7 @@ void Gateway::stop()
     if (serverThread.joinable())
     {
         serverThread.join();
-        Logger::log("HTTP Gateway thread stopped");
+        logger::log("HTTP Gateway thread stopped");
     }
 }
 
@@ -256,7 +256,7 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
     bool sent = out_.send(task);
     if (!sent)
     {
-        Logger::log("Gateway: Failed to send task to processing service");
+        logger::log("Gateway: Failed to send task to processing service");
         F_Task errorTask;
         errorTask.type_ = F_TaskType::ERROR;
         errorTask.data_ = {{"status", "error"}, {"message", "IPC communication failure"}};
@@ -271,7 +271,7 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count() > timeoutMs)
         {
-            Logger::log("Gateway: Response timeout");
+            logger::log("Gateway: Response timeout");
             F_Task timeoutTask;
             timeoutTask.type_ = F_TaskType::ERROR;
             timeoutTask.data_ = {{"status", "error"}, {"message", "Response timeout"}};
@@ -289,7 +289,7 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
 }
 
 void Gateway::signal_shutdown() {
-    Logger::log("Sending shutdown signal to dispatch.");
+    logger::log("Sending shutdown signal to dispatch.");
     out_.send(F_Task(F_TaskType::SYSKILL));
-    Logger::log("Signal sent.");
+    logger::log("Signal sent.");
 }

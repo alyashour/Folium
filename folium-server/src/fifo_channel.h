@@ -9,49 +9,10 @@
 #include <iostream>
 #include <filesystem>
 
+#include "f_task.h"
+
 namespace ipc
 {
-
-    constexpr int MAX_PAYLOAD = 256;
-
-    inline void create_fifo(const std::string& path) {
-        namespace fs = std::filesystem;
-        if (!fs::exists(path)) {
-            if (mkfifo(path.c_str(), 0666) < 0) {
-                perror(("mkfifo failed for " + path).c_str());
-                throw std::runtime_error("Failed to create FIFO: " + path);
-            }
-        }
-    }
-    
-    inline void delete_fifo(const std::string& path) {
-        namespace fs = std::filesystem;
-        if (fs::exists(path)) {
-            unlink(path.c_str());
-        }
-    }
-    
-    inline void setup_fifos(const std::string& path1, const std::string& path2) {
-        create_fifo(path1);
-        create_fifo(path2);
-    }
-    
-    inline void cleanup_fifos(const std::string& path1, const std::string& path2) {
-        delete_fifo(path1);
-        delete_fifo(path2);
-    }
-
-    struct Task
-    {
-        int id;
-        char payload[MAX_PAYLOAD];
-        bool completed; // 0 = pending, 1 = done
-
-        void print() const
-        {
-            std::cout << "Task[" << id << "] (" << (completed ? "✓" : "✗") << "): " << payload << "\n";
-        }
-    };
 
     class FifoChannel
     {
@@ -82,16 +43,16 @@ namespace ipc
             }
         }
 
-        bool send(const Task &task)
+        bool send(const F_Task&task)
         {
-            ssize_t n = ::write(fd_, &task, sizeof(Task));
-            return n == sizeof(Task);
+            ssize_t n = ::write(fd_, &task, sizeof(F_Task));
+            return n == sizeof(F_Task);
         }
 
-        bool read(Task &task)
+        bool read(F_Task &task)
         {
-            ssize_t n = ::read(fd_, &task, sizeof(Task));
-            return n == sizeof(Task);
+            ssize_t n = ::read(fd_, &task, sizeof(F_Task));
+            return n == sizeof(F_Task);
         }
 
     private:

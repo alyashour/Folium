@@ -27,9 +27,6 @@ namespace gateway
     private:
         std::thread serverThread;
         httplib::Server svr;
-
-        void initializeRoutes();
-
     public:
         Gateway();
         ~Gateway();

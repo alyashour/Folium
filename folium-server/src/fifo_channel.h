@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <filesystem>
+#include <poll.h>  // Add this for polling
 
 #include "f_task.h"
 
@@ -53,6 +54,24 @@ namespace ipc
         {
             ssize_t n = ::read(fd_, &task, sizeof(F_Task));
             return n == sizeof(F_Task);
+        }
+        
+        // Add this new method to check if data is available
+        bool hasData(int timeout_ms = 0) const
+        {
+            struct pollfd pfd;
+            pfd.fd = fd_;
+            pfd.events = POLLIN;
+            
+            int res = poll(&pfd, 1, timeout_ms);
+            
+            if (res < 0) {
+                // Error occurred
+                return false;
+            }
+            
+            // Return true if POLLIN is set, indicating data available to read
+            return (res > 0) && (pfd.revents & POLLIN);
         }
 
     private:

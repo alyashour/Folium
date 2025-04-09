@@ -7,7 +7,6 @@
 #include "logger.h"
 #include "version.h"
 #include "fifo_util.h"
-#include "fifo_buffered.h"
 #include "dispatcher.h"
 #include "http_gateway.h"
 

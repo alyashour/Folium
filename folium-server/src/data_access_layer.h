@@ -108,6 +108,35 @@ namespace DAL {
      */
     void writeJsonFile(const nlohmann::json& data);
 
+    /**
+     * @brief Execute an SQL query on the database
+     * @param query The SQL query to execute
+     * @return True if the query was executed successfully, false otherwise
+     * @throws std::runtime_error if the database connection fails
+     */
+    bool execute_query(const std::string& query);
+
+    /**
+     * @brief Check if a query returns any results
+     * @param query The SQL query to execute (should be a COUNT or similar query)
+     * @return True if the query returns a non-zero result, false otherwise
+     */
+    bool query_returns_results(const std::string& query);
+
+     /**
+     * @brief Escape a string to make it safe for use in SQL queries
+     * @param input The string to escape
+     * @return The escaped string
+     */
+    std::string escape_string(const std::string& input);
+    
+    /**
+     * @brief Execute a query and return the first column of the first row
+     * @param query The SQL query to execute
+     * @return The result string, or empty if no results
+     */
+    std::string get_single_result(const std::string& query);
+    
     // ===== AUTH-RELATED FUNCTIONS ===== //
 
     /**

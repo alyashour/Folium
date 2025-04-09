@@ -37,6 +37,7 @@
 #include <optional>
 #include <unordered_map>
 #include <memory>
+#include <iostream> // Add this line for std::cerr
 
 //----------------------------------------------------------------------
 // Global per-file mutex management
@@ -571,6 +572,112 @@ namespace DAL {
         dalLogger.logDebug("updateUserPassword: Password updated successfully for user: " + username);
         return true;
     }
+
+/**
+ * @brief Execute an SQL query on the database
+ * @param query The SQL query to execute
+ * @return True if the query was executed successfully, false otherwise
+ */
+bool execute_query(const std::string& query) {
+    MYSQL* conn = createConnection();
+    if (!conn) return false;
+
+    bool success = (mysql_query(conn, query.c_str()) == 0);
+    if (!success) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+    }
+    
+    mysql_close(conn);
+    return success;
+}
+/**
+ * @brief Escape a string to make it safe for use in SQL queries
+ * @param input The string to escape
+ * @return The escaped string
+ */
+std::string escape_string(const std::string& input) {
+    MYSQL* conn = createConnection();
+    if (!conn) {
+        std::cerr << "[ERROR] Failed to connect to database for string escaping." << std::endl;
+        // Basic fallback escaping for single quotes
+        std::string result = input;
+        size_t pos = 0;
+        while ((pos = result.find("'", pos)) != std::string::npos) {
+            result.replace(pos, 1, "''");
+            pos += 2;
+        }
+        return result;
+    }
+
+    char* escaped = new char[input.length() * 2 + 1];
+    mysql_real_escape_string(conn, escaped, input.c_str(), input.length());
+    std::string result(escaped);
+    delete[] escaped;
+    mysql_close(conn);
+    return result;
+}
+
+/**
+ * @brief Execute a query and return the first column of the first row
+ * @param query The SQL query to execute
+ * @return The result string, or empty if no results
+ */
+std::string get_single_result(const std::string& query) {
+    MYSQL* conn = createConnection();
+    if (!conn) {
+        std::cerr << "[ERROR] Failed to connect to database for query." << std::endl;
+        return "";
+    }
+
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+        mysql_close(conn);
+        return "";
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    std::string value;
+    if (result) {
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (row && row[0]) {
+            value = row[0];
+        }
+        mysql_free_result(result);
+    }
+    mysql_close(conn);
+    return value;
+}
+
+/**
+ * @brief Check if a query returns any results
+ * @param query The SQL query to execute (should be a COUNT or similar query)
+ * @return True if the query returns a non-zero result, false otherwise
+ */
+bool query_returns_results(const std::string& query) {
+    MYSQL* conn = createConnection();
+    if (!conn) return false;
+
+    if (mysql_query(conn, query.c_str())) {
+        std::cerr << "[ERROR] Query failed: " << mysql_error(conn) << "\n";
+        mysql_close(conn);
+        return false;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    bool has_results = false;
+    
+    if (result) {
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (row && row[0]) {
+            // Convert the first column to an integer
+            has_results = (std::stoi(row[0]) > 0);
+        }
+        mysql_free_result(result);
+    }
+    
+    mysql_close(conn);
+    return has_results;
+}
 
 } // end namespace DAL
 

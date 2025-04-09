@@ -114,7 +114,7 @@ find_library(MYSQLCLIENT_LIB
     NAMES mysqlclient
     PATHS   /usr/lib/x86_64-linux-gnu
             /usr/local/lib
-            /opt/homebrew/lib
+            /opt/homebrew/Cellar/mysql-client/9.2.0/lib /opt/homebrew/lib
 )
 if(NOT MYSQLCLIENT_LIB)
     message(FATAL_ERROR "MySQL client library not found")
@@ -147,8 +147,16 @@ add_test(NAME auth_test COMMAND auth_test)
 
 # Core
 add_executable(core_test tests/test_core.cc)
-target_link_libraries(core_test PRIVATE folium-core gtest gtest_main)
-add_test(NAME core_test COMMAND log_test)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main ${MYSQLCPPCONN_LIB})
+add_test(NAME core_test COMMAND core_test)
+
+# Add MySQL include and library paths
+include_directories(/opt/homebrew/opt/mysql-client/include)
+link_directories(/opt/homebrew/opt/mysql-client/lib)
+
+# Link the MySQL client library
+target_link_libraries(folium-core PRIVATE mysqlclient)
+target_link_libraries(core_test PRIVATE folium-core gtest gtest_main mysqlclient)
 
 # Gateway
 add_executable(gateway_test tests/test_gateway.cc)

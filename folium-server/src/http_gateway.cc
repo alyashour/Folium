@@ -1,34 +1,92 @@
 #include "http_gateway.h"
+#include "api_routes.h"
 
 #include <string>
 #include <thread>
 #include <iostream>
+#include <exception>
 
 #include "httplib.h"
-#include "logger.h"
+#include "nlohmann/json.hpp"
 
-static httplib::Server svr;
+#include "logger.h"
+#include "auth.h"
+#include "fifo_channel.h"
 
 using namespace gateway;
+using json = nlohmann::json;
 
-Gateway::Gateway()
+/**
+ * @brief Extracts a JWT from a request.
+ * 
+ *
+ * @param req 
+ * @return The jwt (string) if found. 
+ */
+std::string extractJWT(const httplib::Request& req) {
+    auto authHeader = req.get_header_value("Authorization");
+
+    if (authHeader.empty()) {
+        throw std::exception();
+    }
+
+    // check if it's a bearer token
+    if (authHeader.substr(0, 7) == "Bearer ") {
+        return authHeader.substr(7);
+    }
+
+    return "";
+}
+
+/**
+ * @brief Helper initialize routes func.
+ * 
+ *
+ * @param svr The HTTP server instance
+ */
+void initializeRoutes(httplib::Server& svr)
 {
-    this->initializeRoutes();
+    /* GET ROUTES */
+
+    // ping
+    svr.Get("/ping", [](const httplib::Request&, httplib::Response& res) { 
+        Logger::log("Gateway: GET /ping.");
+
+        res.set_content(
+            "Pong!\n",
+            "text/plain"
+        ); 
+    });
+
+    /* POST ROUTES */
+
+    // register
+    svr.Post("/api/auth/register", [](const httplib::Request& req, httplib::Response& res) {
+        Logger::log("Gateway: POST /api/auth/register");
+
+
+    });
+
+    // log in
+    svr.Post("/api/auth/login", [](const httplib::Request& req, httplib::Response& res) {
+        Logger::log("Gateway: POST /api/auth/login");
+    });
+
+    // log out
+    svr.Post("/api/auth/logout", [](const httplib::Request& req, httplib::Response& res) {
+        Logger::log("Gateway: POST /api/auth/logout");
+
+    });
+}
+
+Gateway::Gateway(ipc::FifoChannel in, ipc::FifoChannel out)
+    :in_(in), out_(out)
+{
+    initializeRoutes(svr);
 }
 
 Gateway::~Gateway() {
     this->stop();
-}
-
-void Gateway::initializeRoutes()
-{
-    svr.Get("/ping", [](const httplib::Request &, httplib::Response &res) { 
-            res.set_content(
-                "Hello World!\n",
-                "text/plain"
-            ); 
-        }
-    );
 }
 
 void Gateway::listen(std::string ip, int port)

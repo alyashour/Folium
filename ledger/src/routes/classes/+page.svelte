@@ -6,6 +6,11 @@
     let classes: Array<{ id: string; title: string }> = [];
     let loading: boolean = true;
     let error: string | null = null;
+
+    let showModal = false;
+  let className = "";
+  let startDate = "";
+  let endDate = "";
     
     async function fetchClasses() {
       loading = true;
@@ -28,6 +33,26 @@
     onMount(() => {
       fetchClasses();
     });
+
+    // Functions to manage the modal popup
+    const openModal = () => {
+    showModal = true;
+  };
+
+  const closeModal = () => {
+    showModal = false;
+    // Optionally clear input fields after closing
+    className = "";
+    startDate = "";
+    endDate = "";
+  };
+
+  const addClass = () => {
+    // Here you can include validation or API calls
+    console.log("New class added:", className, startDate, endDate);
+    // For now, simply close the modal after the button is clicked
+    closeModal();
+  };
   </script>
 
   
@@ -49,7 +74,48 @@
     </div>
   {/if}
   
-  <Button class="mt-5">Add New Class</Button>
+  <Button class="mt-5" on:click={openModal}>Add New Class</Button>
+
+{#if showModal}
+  <!-- Renamed the overlay class -->
+  <div class="custom-modal-overlay" on:click={closeModal}>
+    <!-- Renamed the modal class -->
+    <div class="custom-modal" on:click|stopPropagation>
+      <div class="custom-modal-header">Add New Class</div>
+      <div class="custom-modal-body">
+        <div>
+          <label for="className">Class Name:</label>
+          <input
+            id="className"
+            type="text"
+            bind:value={className}
+            placeholder="Enter class name"
+          />
+        </div>
+        <div>
+          <label for="startDate">Start Date:</label>
+          <input
+            id="startDate"
+            type="date"
+            bind:value={startDate}
+          />
+        </div>
+        <div>
+          <label for="endDate">End Date:</label>
+          <input
+            id="endDate"
+            type="date"
+            bind:value={endDate}
+          />
+        </div>
+      </div>
+      <div class="custom-modal-footer">
+        <button on:click={closeModal}>Cancel</button>
+        <button on:click={addClass}>Add Class</button>
+      </div>
+    </div>
+  </div>
+{/if}
   
   <style>
     /* Flex container for the tiles */
@@ -81,5 +147,59 @@
       margin: 0;
       font-size: 1.2rem;
     }
+
+    .custom-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .custom-modal {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    width: 320px;
+    max-width: 95%;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .custom-modal-header {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+  }
+
+  .custom-modal-body > div {
+    margin-bottom: 0.75rem;
+  }
+
+  .custom-modal-body label {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  .custom-modal-body input {
+    width: 100%;
+    padding: 0.5rem;
+    box-sizing: border-box;
+  }
+
+  .custom-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
   </style>
   

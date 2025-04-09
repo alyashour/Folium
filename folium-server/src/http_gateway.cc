@@ -263,29 +263,19 @@ F_Task Gateway::processTaskAndWaitForResponse(const F_Task &task, int timeoutMs)
         return errorTask;
     }
 
-    // Wait for response on in channel with timeout
-    auto start = std::chrono::steady_clock::now();
-    while (true)
-    {
-        // Check if we've exceeded timeout
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count() > timeoutMs)
-        {
-            logger::log("Gateway: Response timeout");
-            F_Task timeoutTask;
-            timeoutTask.type_ = F_TaskType::ERROR;
-            timeoutTask.data_ = {{"status", "error"}, {"message", "Response timeout"}};
-            return timeoutTask;
-        }
+    // read the response back
+    F_Task ft;
+    bool success = in_.read(ft);
 
-        // Use blocking read with timeout
-        F_Task response;
-        bool read = in_.read(response, 100); // Block for up to 100ms
-        if (read)
-        {
-            return response; // Return the complete F_Task
-        }
+    if (!success) {
+        logger::logErr("Couldn't read from in.");
+        ft.type_ = F_TaskType::ERROR;
+        ft.data_ = {
+            {"error", "Couldn't read from dispatch. Please try again."}
+        };
     }
+    
+    return ft;
 }
 
 void Gateway::signal_shutdown() {

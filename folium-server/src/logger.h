@@ -21,7 +21,6 @@
 
 namespace logger
 {
-
     /**
      * @brief Enumeration of logging levels.
      */
@@ -33,9 +32,48 @@ namespace logger
         ERR
     };
 
+    // Global logging configuration shared among all Logger instances.
+    static LoggingLevel currentLevel;
+    static bool loggingEnabled;
+
     void log(std::string s);
 
-    void logErr(std::string s, bool do_log_trace=false);
+    void logErr(std::string s, bool do_log_trace = false);
+
+    /**
+     * @brief Logs a stream of items.
+     */
+    template <typename... Args>
+    void logS(Args &&...args)
+    {
+        std::ostringstream oss;
+        (oss << ... << args); // fold expression for streaming all args
+        log(oss.str());
+    }
+
+    /**
+     * @brief Returns a timestamp string in "HH:MM:SS" format.
+     *
+     * @return std::string The timestamp.
+     */
+    std::string static getTimestamp()
+    {
+        // get time
+        time_t timestamp;
+        time(&timestamp);
+
+        // convert to string
+        char timeString[std::size("Thh:mm:ssZ")];
+        std::strftime(
+            std::data(timeString),
+            std::size(timeString),
+            "%T",
+            std::localtime(&timestamp));
+
+        std::string s(timeString);
+
+        return s;
+    }
 
     /**
      * @brief Logger class for instance-based logging.
@@ -53,7 +91,8 @@ namespace logger
          *
          * @param name A unique name that identifies the logger instance.
          */
-        explicit Logger(const std::string &name);
+        explicit Logger(const std::string &name)
+            : instanceName(name) {}
 
         /**
          * @brief Set the logger's logging level.
@@ -85,8 +124,9 @@ namespace logger
          * @tparam Args Types to log.
          * @param args Items to stream and log.
          */
-        template<typename... Args>
-        void logS(Args&&... args) const {
+        template <typename... Args>
+        void logS(Args &&...args) const
+        {
             std::ostringstream oss;
             (oss << ... << args); // Fold expression to stream all args.
             log(oss.str());
@@ -119,17 +159,6 @@ namespace logger
     private:
         // The unique instance name (e.g., "auth", "database", etc.)
         std::string instanceName;
-
-        // Global logging configuration shared among all Logger instances.
-        static LoggingLevel currentLevel;
-        static bool loggingEnabled;
-
-        /**
-         * @brief Returns a timestamp string in "HH:MM:SS" format.
-         *
-         * @return std::string The timestamp.
-         */
-        static std::string getTimestamp();
 
         /**
          * @brief Builds the header string combining the instance name and timestamp.

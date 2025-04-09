@@ -17,7 +17,7 @@
 #include <iostream>
 #include <condition_variable>
 
-namespace Core
+namespace core
 {
     std::string getNote(int noteID, int userID);                          // Retrieve data by ID
     void updateNote(int noteID, const std::string &noteDATA);             // Update data by ID

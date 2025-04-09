@@ -7,21 +7,20 @@
 #include "logger.h"
 #include "version.h"
 #include "fifo_util.h"
-#include "fifo_buffered.h"
 #include "dispatcher.h"
 #include "http_gateway.h"
 
-std::string ip = "127.0.0.1";
-int port = 50105;
-unsigned int num_threads = 10;
+const std::string ip = "127.0.0.1";
+const int port = 50105;
+const unsigned int num_threads = 10;
 
 const std::string GW2DP = "GW2DP";
 const std::string DP2GW = "DP2GW";
 
 int main(void)
 {
-    Logger::log("Starting Folium Server v" + Folium::VERSION);
-    Logger::logS("Folium Server v", Folium::VERSION, " (build ", Folium::BUILD_ID, " ", Folium::BUILD_DATE, ")");
+    logger::log("Starting Folium Server v" + Folium::VERSION);
+    logger::logS("Folium Server v", Folium::VERSION, " (build ", Folium::BUILD_ID, " ", Folium::BUILD_DATE, ")");
 
     // Auto-cleanup on crash or Ctrl+C
     ipc::install_signal_handler();
@@ -40,31 +39,28 @@ int main(void)
 
     if (pid == 0) {
         // child
-        Logger::logS("Dispatch process online with pid: ", pid);
+        logger::logS("Dispatch process online with pid: ", pid);
 
         // create dispatcher
         ipc::FifoChannel in(GW2DP, O_RDONLY);
         ipc::FifoChannel out(DP2GW, O_WRONLY);
-        Dispatcher::DispatcherImpl dispatcher(in, out);
-
-        // tell dispatcher to create threads
-        dispatcher.create_threads(10);
+        dispatcher::Dispatcher dispatcher(in, out, num_threads);
 
         // start listening
         dispatcher.start();
 
         // after close
-        Logger::log("Dispatch process done, closing...");
+        logger::log("Dispatch process done, closing...");
 
         return 0;
     }
+    // parent
     else {
-        // parent
-        Logger::logS("Gateway process online with pid: ", pid);
+        logger::logS("Gateway process online with pid: ", pid);
 
         // create gateway
-        ipc::FifoChannel in(DP2GW, O_RDONLY);
         ipc::FifoChannel out(GW2DP, O_WRONLY);
+        ipc::FifoChannel in(DP2GW, O_RDONLY);
         gateway::Gateway gateway(in, out);
         gateway.listen(ip, port);
 
@@ -84,12 +80,12 @@ int main(void)
         }
 
         // after close, print and wait for child process to finish
-        Logger::log("Gateway process done, merging with Gateway process...");
+        logger::log("Gateway process done, merging with Gateway process...");
         wait(nullptr);
 
-        Logger::log("Processes merged.");
+        logger::log("Processes merged.");
     }
 
-    Logger::log("Folium Server Closed.");
+    logger::log("Folium Server Closed.");
     return 0;
 }

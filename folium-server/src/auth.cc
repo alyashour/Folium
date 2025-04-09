@@ -39,7 +39,7 @@
 using json = nlohmann::json;
 
 // Create a dedicated logger instance for the authentication module.
-static Logger::Logger authLogger("auth");
+static logger::Logger authLogger("auth");
 
 // JWT secret key (in production, store securely and do not hard-code)
 static const std::string jwt_secret = "operating_systems";

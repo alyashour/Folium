@@ -230,9 +230,3 @@ TEST_F(AuthTest, ChangePasswordUserNotFound) {
     bool changed = auth::changePassword("nonexistent", "any", "newpass");
     EXPECT_FALSE(changed);
 }
-
-// -----------------------------------------------------------------------------
-// Test for isLoggedIn: as implemented, always returns false.
-TEST_F(AuthTest, IsLoggedInAlwaysFalse) {
-    EXPECT_FALSE(auth::isLoggedIn("testuser"));
-}

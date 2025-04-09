@@ -95,13 +95,15 @@ namespace auth {
      */
     bool changePassword(const std::string& username, const std::string& oldPassword, const std::string& newPassword);
 
-    /**
-     * @brief Checks if a user is logged in.
-     * In this stateless design, token presence is not tracked server-side.
-     * @param username The username.
-     * @return false always (logged-in state is determined by token validation).
-     */
-    bool isLoggedIn(const std::string& username);
+// DEPECATED
+
+    // /**
+    //  * @brief Checks if a user is logged in.
+    //  * In this stateless design, token presence is not tracked server-side.
+    //  * @param username The username.
+    //  * @return false always (logged-in state is determined by token validation).
+    //  */
+    // bool isLoggedIn(const std::string& username);
 
     /**
      * @brief Function to change a user's password.

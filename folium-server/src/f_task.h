@@ -15,7 +15,8 @@ enum Task_Type {
     EDIT_NOTE,
     SING_IN,
     SING_UP,
-    LOG_OUT
+    LOG_OUT,
+    SYSKILL
 };
 
 /**

@@ -110,20 +110,23 @@ if(NOT MYSQLCPPCONN_LIB)
     message(FATAL_ERROR "MySQL Connector/C++ library not found")
 endif()
 
-# Find MySQL C client library
+# Find the MySQL client library
 find_library(MYSQLCLIENT_LIB 
     NAMES mysqlclient
-    PATHS /opt/homebrew/lib /usr/local/lib
+    PATHS   /usr/lib/x86_64-linux-gnu
+            /usr/local/lib
+            /opt/homebrew/lib
 )
 if(NOT MYSQLCLIENT_LIB)
-    message(FATAL_ERROR "MySQL C client library (libmysqlclient) not found")
+    message(FATAL_ERROR "MySQL client library not found")
 endif()
 
-# Link dependencies
+# Link dependencies for folium-core (notice the addition of MYSQLCLIENT_LIB)
 target_link_libraries(folium-core PUBLIC 
     nlohmann_json::nlohmann_json
     httplib
     ${MYSQLCPPCONN_LIB}
+    ${MYSQLCLIENT_LIB}   # New library added here
     jwt-cpp
 )
 
@@ -138,10 +141,10 @@ add_dependencies(folium-server version-info)
 ## TESTING ##
 enable_testing()
 
-# Auth (NOT YET IMPLEMENTED)
-# add_executable(auth_test tests/test_auth.cc)
-# target_link_libraries(auth_test PRIVATE folium-core gtest gtest_main)
-# add_test(NAME auth_test COMMAND auth_test)
+# Auth
+add_executable(auth_test tests/test_auth.cc)
+target_link_libraries(auth_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME auth_test COMMAND auth_test)
 
 # Core
 add_executable(core_test tests/test_core.cc)
@@ -157,6 +160,11 @@ add_test(NAME gateway_test COMMAND gateway_test)
 add_executable(log_test tests/test_logger.cc)
 target_link_libraries(log_test PRIVATE folium-core gtest gtest_main)
 add_test(NAME log_test COMMAND log_test)
+
+# DAL
+add_executable(dal_test tests/test_dal.cc)
+target_link_libraries(dal_test PRIVATE folium-core gtest gtest_main)
+add_test(NAME dal_test COMMAND dal_test)
 
 # Installation rules
 install(TARGETS folium-server DESTINATION bin)

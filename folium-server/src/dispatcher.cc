@@ -62,8 +62,12 @@ struct TaskComparator {
 // --- Dispatcher Implementation ---
 class DispatcherImpl {
 public:
-    DispatcherImpl() : stopFlag(false), specialTaskActive(false) {}
-    ~DispatcherImpl() { stop(); }
+    // Constructor now takes FIFO paths for requests and responses.
+    DispatcherImpl(const std::string &reqFifo, const std::string &resFifo)
+      : requestFifo(reqFifo), responseFifo(resFifo),
+        stopFlag(false), specialTaskActive(false)
+    {}
+        ~DispatcherImpl() { stop(); }
 
     // Create the thread pool. This function corresponds to the header declaration.
     bool createThreads(unsigned int numThreads) {
@@ -76,16 +80,21 @@ public:
         return true;
     }
 
-    // Modified addTask: no need to pass a priority; we compute it statically.
+        // Start the listener thread. The callback will be invoked for each IPC task received.
+    // The FIFO paths are already stored in the object.
+    void startListener(const std::function<void(const ipc::Task&)>& callback) {
+        listenerThread = std::thread(&DispatcherImpl::listen, this, callback);
+    }
+
+    // Add a task to the dispatcher.
     void addTask(const ExtendedTask& task) {
         int priority = getStaticPriority(task.type);
-        // If the task is a CREATE_NOTE, treat it as a special task.
         if (task.type == CREATE_NOTE) {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 specialTaskActive = true;  // Stall other tasks.
             }
-            // Process the special task in its own thread (blocking until complete).
+            // Process special task in its own temporary thread.
             std::thread specialThread(&DispatcherImpl::processSpecialTask, this, task);
             specialThread.join();
             {
@@ -94,35 +103,32 @@ public:
             }
             cv.notify_all();
         } else {
-            // For all other tasks, push them into the priority queue.
             std::unique_lock<std::mutex> lock(queueMutex);
             taskQueue.push(PrioritizedTask(task, priority));
             cv.notify_one();
         }
     }
 
-    // New function: Listens for incoming tasks via a FIFO channel.
-    // This function opens a FIFO for reading requests and another for sending responses.
-    // It loops forever, reading a Task from the request FIFO, dispatching it, and then sending back a response.
-    void listen(const std::string& reqFifoPath, const std::string& resFifoPath) {
-        // Create FIFO channels for requests and responses.
-        ipc::FifoChannel requestChannel(reqFifoPath, O_RDONLY, true);
-        ipc::FifoChannel responseChannel(resFifoPath, O_WRONLY, true);
-        
+private:
+    // Listener function that continuously reads IPC tasks.
+    void listen(const std::function<void(const ipc::Task&)>& callback) {
+        // Open FIFO channels (blocking mode, auto-create if needed is assumed)
+        ipc::FifoChannel requestChannel(requestFifo, O_RDONLY, true);
+        ipc::FifoChannel responseChannel(responseFifo, O_WRONLY, true);
         ipc::Task ipcTask;
-        while (true) {
-            // Block until a task is received via the FIFO.
+        while (!stopFlag) {
             if (requestChannel.read(ipcTask)) {
                 std::cout << "[Dispatcher] Received IPC Task: ";
                 ipcTask.print();
-                // Convert ipc::Task to ExtendedTask.
-                // (In a real system, you’d parse payload to determine type and parameters.)
-                // Here we use task.id as an example to pick a type:
+                
+                // Invoke the callback to notify the application.
+                callback(ipcTask);
+
+                // Convert the ipc::Task to an ExtendedTask.
                 Task_Type type = static_cast<Task_Type>(ipcTask.id);
                 ExtendedTask extTask(type, ipcTask.id, 0, ipcTask.payload);
-                // Dispatch the task using our addTask function.
                 addTask(extTask);
-                // After processing, mark the IPC task as completed and send it back.
+
                 ipcTask.completed = true;
                 responseChannel.send(ipcTask);
             }
@@ -136,17 +142,18 @@ public:
         listenerThread.detach();
     }
 
-    // Stop the dispatcher and join all threads.
+    // Stop the dispatcher: signal stop, join worker threads and listener thread.
     void stop() {
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             stopFlag = true;
         }
         cv.notify_all();
-        for (auto& t : threads) {
-            if (t.joinable())
-                t.join();
+        for (auto &t : threads) {
+            if (t.joinable()) t.join();
         }
+        if (listenerThread.joinable())
+            listenerThread.join();
     }
 
 private:
